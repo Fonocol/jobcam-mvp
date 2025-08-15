@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  name      String
+  role      Role      @default(CANDIDATE)
+  createdAt DateTime  @default(now())
+  candidate Candidate?
+  recruiter Recruiter?
+}
+
+model Candidate {
+  id           String       @id @default(cuid())
+  userId       String       @unique
+  headline     String?
+  location     String?
+  resumeUrl    String?
+  User         User         @relation(fields: [userId], references: [id])
+  applications Application[]
+}
+
+model Recruiter {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  companyId String?
+  User      User     @relation(fields: [userId], references: [id])
+
+  // relation vers Company (optionnelle)
+  company   Company? @relation(fields: [companyId], references: [id])
+}
+
+model Company {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  region      String?
+  createdAt   DateTime @default(now())
+
+  // back-relation vers Recruiter
+  recruiters  Recruiter[]
+
+  // tes autres relations
+  jobs        Job[]
+}
+
+
+model Job {
+  id           String        @id @default(cuid())
+  title        String
+  companyId    String
+  region       String
+  type         String        // CDI, CDD, Stage...
+  description  String
+  createdAt    DateTime      @default(now())
+  Company      Company       @relation(fields: [companyId], references: [id])
+  applications Application[]
+}
+
+model Application {
+  id          String    @id @default(cuid())
+  jobId       String
+  candidateId String
+  message     String?
+  cvUrl       String?
+  createdAt   DateTime  @default(now())
+  Job         Job       @relation(fields: [jobId], references: [id])
+  Candidate   Candidate @relation(fields: [candidateId], references: [id])
+}
