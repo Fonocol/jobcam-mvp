@@ -26,6 +26,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <h1 className="text-xl font-bold">Plateforme Emploi Cameroun</h1>
                 <nav className="flex space-x-4 mt-2">
                   <Link href="/" className="hover:underline">Accueil</Link>
+                  <Link href="/jobs" className="hover:underline">Jobs</Link>
+                  <Link href="/companies" className="hover:underline">Entreprises</Link>
                   {!session && <Link href="/login" className="hover:underline">Connexion</Link>}
                   {!session && <Link href="/register" className="hover:underline">Inscription</Link>}
                 </nav>

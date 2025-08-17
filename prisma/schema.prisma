@@ -77,6 +77,7 @@ model Application {
   candidateId String
   message     String?
   cvUrl       String?
+  status      String?   @default("PENDING") // Ajoutez ce champ
   createdAt   DateTime  @default(now())
   Job         Job       @relation(fields: [jobId], references: [id])
   Candidate   Candidate @relation(fields: [candidateId], references: [id])

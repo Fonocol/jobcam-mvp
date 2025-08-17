@@ -92,3 +92,23 @@ export async function POST(req: Request) {
     );
   }
 }
+
+
+
+export async function DELETE(request: Request) {
+  const { id } = await request.json();
+
+  if (!id) {
+    return NextResponse.json({ error: "ID manquant" }, { status: 400 });
+  }
+
+  try {
+    await prisma.job.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Erreur lors de la suppression" },
+      { status: 500 }
+    );
+  }
+}

@@ -20,33 +20,36 @@ export default function JobsPage() {
   if (loading) return <p>Chargement...</p>;
 
   return (
-    <main className="p-4 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Offres d'emploi</h1>
-      
-      <div className="space-y-4">
-        {jobs.map((job) => (
-          <div key={job.id} className="border p-4 rounded-lg hover:shadow-md transition-shadow">
-            <h2 className="text-xl font-semibold">{job.title}</h2>
-            <p className="text-gray-600">
-              {job.Company?.name} • {job.region} • {job.type}
-            </p>
-            <div className="mt-3 flex justify-between items-center">
-              <Link 
-                href={`/jobs/${job.id}`} 
-                className="text-blue-500 hover:underline"
-              >
-                Voir détails
-              </Link>
-              <Link
-                href={`/jobs/${job.id}/apply`}
-                className="bg-blue-500 text-white px-3 py-1 rounded text-sm"
-              >
-                Postuler
-              </Link>
-            </div>
-          </div>
-        ))}
+<main className="p-4">
+  <h1 className="text-2xl font-bold mb-6">Offres d'emploi</h1>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {jobs.map((job) => (
+      <div key={job.id} className="border p-4 rounded">
+        <h2 className="font-semibold">{job.title}</h2>
+
+        <div className="text-sm text-gray-600 mt-1 flex items-center gap-2 flex-wrap">
+          <Link 
+            href={`/companies/${job.companyId}`}
+            className="text-blue-500 hover:underline"
+          >
+            {job.Company?.name}
+          </Link>
+          <span>•</span>
+          <span>{job.region}</span>
+          <span>•</span>
+          <span>{job.type}</span>
+        </div>
+
+        <div className="mt-3 flex justify-between text-sm">
+          <Link href={`/jobs/${job.id}`} className="text-blue-500">Voir détails</Link>
+
+        </div>
       </div>
-    </main>
+    ))}
+  </div>
+</main>
+
   );
-}
+
+ }

@@ -1,33 +1,47 @@
-"use client";
+// src/app/jobs/[id]/page.tsx
+import { getServerSession } from "next-auth";
+import { authConfig } from "@/auth.config";
+import { prisma } from "@/lib/prisma";
+import ApplyButton from "./ApplyButton";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params; 
+  const session = await getServerSession(authConfig);
+  const job = await prisma.job.findUnique({
+    where: { id: id },
+    include: { Company: true },
+  });
 
-export default function JobDetailPage() {
-  const params = useParams();
-  const [job, setJob] = useState<any>(null);
+  if (!job) {
+    return <div>Offre non trouvée</div>;
+  }
 
-  useEffect(() => {
-    fetch(`/api/jobs?id=${params.id}`)
-      .then((res) => res.json())
-      .then((data) => setJob(data[0]))
-      .catch(console.error);
-  }, [params.id]);
+  let hasApplied = false;
+  if (session?.user?.role === "CANDIDATE") {
+    const application = await prisma.application.findFirst({
+      where: {
+        jobId: id,
+        candidateId: session.user.candidateId,
+      },
+    });
+    hasApplied = !!application;
+  }
 
-  if (!job) return <p>Chargement...</p>;
+  const isRecruiter = session?.user?.role === "RECRUITER";
 
   return (
-    <main className="p-4">
+    <main className="p-4 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold">{job.title}</h1>
-      <p>{job.Company?.name} – {job.region} ({job.type})</p>
-      <p className="mt-4">{job.description}</p>
+      <p className="text-gray-600">
+        {job.Company?.name} • {job.region} • {job.type}
+      </p>
+      <div className="mt-6 prose" dangerouslySetInnerHTML={{ __html: job.description }} />
 
-      <a
-        href={`/jobs/${job.id}/apply`}
-        className="inline-block mt-6 bg-blue-500 text-white px-4 py-2 rounded"
-      >
-        Postuler
-      </a>
+      <ApplyButton 
+        jobId={job.id}
+        isRecruiter={isRecruiter}
+        hasApplied={hasApplied}
+      />
     </main>
   );
 }

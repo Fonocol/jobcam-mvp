@@ -1,9 +1,11 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function ApplyPage() {
+  const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -16,7 +18,7 @@ export default function ApplyPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jobId: params.id,
-        candidateId: "ID_CANDIDAT_TEST", // TODO: remplacer par ID connecté
+        candidateId: session?.user.candidateId, // TODO: remplacer par ID connecté
         message,
         cvUrl
       }),

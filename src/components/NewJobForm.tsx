@@ -31,7 +31,7 @@ export default function NewJobForm({ companyId }: { companyId: string }) {
         return;
       }
 
-      router.push("/recruiter/dashboard");
+      router.push("/dashboard");
     } catch (err) {
       setError("Erreur réseau");
       setIsLoading(false);

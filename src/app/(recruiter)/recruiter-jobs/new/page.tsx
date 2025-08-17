@@ -24,7 +24,7 @@ export default async function NewJobPage() {
 
   if (!recruiter?.companyId) {
     // pas de company assignée => rediriger ou afficher message
-    redirect("/");
+    redirect("/company/new");
   }
 
   return (

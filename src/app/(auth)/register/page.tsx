@@ -8,40 +8,88 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // inside RegisterPage component: replace handleSubmit with this
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
-    const formData = new FormData(e.currentTarget);
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({
-        name: formData.get("name"),
-        email: formData.get("email"),
-        password: formData.get("password"),
-        role: formData.get("role"),
-      }),
-      headers: { "Content-Type": "application/json" },
-    });
+    try {
+      const formData = new FormData(e.currentTarget);
+      const name = String(formData.get("name") || "");
+      const email = String(formData.get("email") || "");
+      const password = String(formData.get("password") || "");
+      const role = String(formData.get("role") || "");
 
-    const data = await res.json();
+      // appel API register
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password, role }),
+        headers: { "Content-Type": "application/json" },
+      });
 
-    if (!res.ok) {
-      setError(data.error || "Erreur lors de l'inscription");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.error || "Erreur lors de l'inscription");
+        setIsLoading(false);
+        return;
+      }
+
+      // Auto login après inscription: redirect:false pour récupérer la réponse
+      let signInResponse = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+        callbackUrl: "/",
+      });
+
+      console.log("premier signInResponse:", signInResponse);
+
+      // Si undefined ou null, essaie un ou deux retries (la DB ou cookie peut mettre un petit temps)
+      const maxRetries = 2;
+      let attempt = 0;
+      while ((!signInResponse || (signInResponse as any).error) && attempt < maxRetries) {
+        attempt++;
+        // si erreur explicite, on peut break early (optionnel) — ici on retente seulement si signInResponse est falsy
+        if (signInResponse && (signInResponse as any).error) break;
+
+        // petit délai avant retry
+        await new Promise((r) => setTimeout(r, 500 * attempt));
+        signInResponse = await signIn("credentials", {
+          redirect: false,
+          email,
+          password,
+          callbackUrl: "/",
+        });
+        console.log(`retry ${attempt} signInResponse:`, signInResponse);
+      }
+
+      // vérifications finales
+      if (!signInResponse) {
+        setError("Impossible d'obtenir de réponse du service d'authentification.");
+        setIsLoading(false);
+        return;
+      }
+      if ((signInResponse as any).error) {
+        setError((signInResponse as any).error || "Connexion automatique impossible.");
+        setIsLoading(false);
+        return;
+      }
+
+      const target = (signInResponse as any).url || "/";
+
+      await router.replace(target);
+      // parfois utile de small delay avant refresh mais pas toujours nécessaire
+      router.refresh();
+    } catch (err) {
+      console.error("Register error:", err);
+      setError("Erreur réseau ou serveur. Réessaye plus tard.");
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    // Auto login after registration
-    const signInResponse = await signIn("credentials", {
-      email: formData.get("email") as string,
-      password: formData.get("password") as string,
-      redirect: false,
-    });
-
-    router.push(signInResponse?.url || "/");
   };
+
 
   return (
     <main className="max-w-md mx-auto p-4">
