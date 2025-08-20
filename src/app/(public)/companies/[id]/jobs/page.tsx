@@ -2,26 +2,26 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import {fr} from "date-fns/locale/fr";
+import { fr } from "date-fns/locale/fr";
 
 type Props = {
-  params: { id: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
+  params: Promise<{ id: string }>;
+  searchParams?: { [key: string]: string | string[] | undefined } | Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export default async function CompanyJobsPage({ params, searchParams }: Props) {
-  const companyId = params.id;
+  const { id: companyId } = await params; // 👈 important
+  const resolvedSearch = await Promise.resolve(searchParams ?? {}); // 👈 safe si ce n’est pas une Promise
   const pageSize = 10;
 
-  // parse page from query string (server component)
-  const pageParam = Array.isArray(searchParams?.page) ? searchParams?.page[0] : searchParams?.page;
+  const pageParam = Array.isArray(resolvedSearch.page) ? resolvedSearch.page[0] : resolvedSearch.page;
   const page = Math.max(1, pageParam ? parseInt(pageParam, 10) || 1 : 1);
 
   const [totalJobs, jobs] = await Promise.all([
     prisma.job.count({ where: { companyId } }),
     prisma.job.findMany({
       where: { companyId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,
       select: {
@@ -29,9 +29,9 @@ export default async function CompanyJobsPage({ params, searchParams }: Props) {
         title: true,
         type: true,
         createdAt: true,
-        region: true // adapte selon ton schema
-      }
-    })
+        region: true,
+      },
+    }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(totalJobs / pageSize));
@@ -48,7 +48,7 @@ export default async function CompanyJobsPage({ params, searchParams }: Props) {
           <p>Aucune offre trouvée pour cette page.</p>
         ) : (
           <div className="space-y-3">
-            {jobs.map(job => (
+            {jobs.map((job) => (
               <Link
                 key={job.id}
                 href={`/jobs/${job.id}`}
@@ -57,7 +57,9 @@ export default async function CompanyJobsPage({ params, searchParams }: Props) {
                 <div className="flex justify-between items-start">
                   <div>
                     <h2 className="font-medium">{job.title}</h2>
-                    <p className="text-sm text-gray-600">{job.type} · {job.region ?? '—'}</p>
+                    <p className="text-sm text-gray-600">
+                      {job.type} · {job.region ?? "—"}
+                    </p>
                   </div>
                   <div className="text-xs text-gray-500">
                     {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true, locale: fr })}
@@ -68,7 +70,6 @@ export default async function CompanyJobsPage({ params, searchParams }: Props) {
           </div>
         )}
 
-        {/* Pagination controls */}
         <nav className="mt-6 flex items-center justify-between">
           <div>
             {page > 1 ? (
@@ -83,9 +84,7 @@ export default async function CompanyJobsPage({ params, searchParams }: Props) {
             )}
           </div>
 
-          <div className="text-sm text-gray-600">
-            Page {page} / {totalPages}
-          </div>
+          <div className="text-sm text-gray-600">Page {page} / {totalPages}</div>
 
           <div>
             {page < totalPages ? (
@@ -104,7 +103,7 @@ export default async function CompanyJobsPage({ params, searchParams }: Props) {
 
       <div className="mt-6">
         <Link href={`/companies/${companyId}`} className="text-sm text-blue-600 hover:underline">
-          ← Retour à l'entreprise
+          ← Retour à l&apos;entreprise
         </Link>
       </div>
     </div>

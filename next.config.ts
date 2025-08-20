@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 
 const nextConfig : NextConfig = {
-  eslint: {
+  eslint: { // a suprimer
     ignoreDuringBuilds: true, // TEMPORAIRE : laisse le build passer malgré ESLint
   },
 };
