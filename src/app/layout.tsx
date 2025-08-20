@@ -9,7 +9,7 @@ import { Providers } from "./providers"; // Ajoutez cette ligne
 
 export const metadata: Metadata = {
   title: "Plateforme Emploi Cameroun",
-  description: "MVP pour la plateforme d'offres d'emploi",
+  description: "MVP pour la plateforme",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,7 +23,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <header className="bg-blue-600 text-white p-4">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <div>
-                <h1 className="text-xl font-bold">Plateforme Emploi Cameroun</h1>
+                <h1 className="text-xl font-bold">Plateforme Emploi</h1>
                 <nav className="flex space-x-4 mt-2">
                   <Link href="/" className="hover:underline">Accueil</Link>
                   <Link href="/jobs" className="hover:underline">Jobs</Link>
@@ -46,7 +46,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main className="flex-grow max-w-5xl mx-auto p-4">{children}</main>
 
           <footer className="bg-gray-100 p-4 text-center">
-            © {new Date().getFullYear()} Plateforme Emploi Cameroun - MVP
+            © {new Date().getFullYear()} Plateforme Emploi - MVP
           </footer>
         </Providers> {/* N'oubliez pas de fermer le Providers */}
       </body>

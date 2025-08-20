@@ -43,7 +43,7 @@ export default function CompanyBanner({ company }: {
       >
         <div className="text-center">
           <p className="text-sm text-sky-700/80">Entreprise</p>
-          <p className="text-xs text-sky-600/60">Profil d'entreprise — MVP</p>
+          <p className="text-xs text-sky-600/60">Profil d&apos;entreprise — MVP</p>
         </div>
       </div>
 

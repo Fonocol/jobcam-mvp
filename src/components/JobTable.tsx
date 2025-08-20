@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 export default function JobTable({ jobs }: {
   jobs: Array<{
     id: string;
-    title: string;
-    type: string;
+    title: string | null;
+    type: string | null;
     createdAt: Date;
     _count: { applications: number };
   }>

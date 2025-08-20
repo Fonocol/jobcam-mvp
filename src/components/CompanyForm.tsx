@@ -52,7 +52,7 @@ export default function CompanyForm({ userId }: { userId: string }) {
       )}
 
       <div>
-        <label className="block mb-1">Nom de l'entreprise *</label>
+        <label className="block mb-1">Nom de l&apos;entreprise *</label>
         <input
           type="text"
           value={form.name}

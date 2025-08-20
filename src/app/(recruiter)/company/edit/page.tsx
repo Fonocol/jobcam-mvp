@@ -83,7 +83,7 @@ export default function EditCompanyPage() {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold mb-6">Modifier l'entreprise</h1>
+      <h1 className="text-2xl font-bold mb-6">Modifier l&apos;entreprise</h1>
       
       <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
         <div>

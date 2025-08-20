@@ -56,6 +56,8 @@ model Company {
 
   // tes autres relations
   jobs        Job[]
+
+  @@index([region])
 }
 
 
@@ -63,12 +65,16 @@ model Job {
   id           String        @id @default(cuid())
   title        String
   companyId    String
-  region       String
-  type         String        // CDI, CDD, Stage...
+  region       String?
+  type         String?        // CDI, CDD, Stage...
   description  String
   createdAt    DateTime      @default(now())
   Company      Company       @relation(fields: [companyId], references: [id])
   applications Application[]
+
+  @@index([createdAt])
+  @@index([region])
+  @@index([type])
 }
 
 model Application {

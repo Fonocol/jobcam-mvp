@@ -1,11 +1,55 @@
+// prisma/seed.ts
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { faker } from "@faker-js/faker";
+
 const prisma = new PrismaClient();
 
-async function main() {
-  const password = await bcrypt.hash("test1234", 10);
+// ----------------------
+// Paramètres (ajuste librement)
+// ----------------------
+const PASSWORD_PLAINTEXT = "test1234";
+const NUM_COMPANIES = 15;
+const NUM_RECRUITERS = 40;
+const NUM_CANDIDATES = 400;
+const NUM_JOBS = 1200;
 
-  // Nettoyer la base existante
+// Chaque candidat postulera entre 1 et 5 offres
+const MIN_APPS_PER_CANDIDATE = 1;
+const MAX_APPS_PER_CANDIDATE = 5;
+
+// Traitement en paquets pour aller plus vite sans saturer la DB
+const CHUNK_SIZE = 50;
+
+const REGIONS = [
+  "Centre",
+  "Littoral",
+  "Ouest",
+  "Nord",
+  "Extrême-Nord",
+  "Sud",
+  "Est",
+  "Adamaoua",
+  "Télétravail",
+];
+const JOB_TYPES = ["CDI", "CDD", "Stage", "Freelance", "Alternance"];
+const APP_STATUSES = ["PENDING", "REVIEW", "ACCEPTED", "REJECTED"];
+
+// ----------------------
+function chunk<T>(arr: T[], size = CHUNK_SIZE): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function main() {
+  console.time("seed_total");
+  faker.seed(42);
+
+  const passwordHash = await bcrypt.hash(PASSWORD_PLAINTEXT, 10);
+
+  // 1) Nettoyage (respecter l'ordre des FK)
+  console.log("🧹 Cleaning DB…");
   await prisma.application.deleteMany();
   await prisma.job.deleteMany();
   await prisma.candidate.deleteMany();
@@ -13,145 +57,189 @@ async function main() {
   await prisma.company.deleteMany();
   await prisma.user.deleteMany();
 
-  // Création des entreprises camerounaises réalistes
-  const companies = await prisma.$transaction([
-    prisma.company.create({
-      data: {
-        name: "Kiro'o Games",
-        description: "Premier studio de jeux vidéo en Afrique Centrale",
-        region: "Centre"
-      }
-    }),
-    prisma.company.create({
-      data: {
-        name: "Jangolo",
-        description: "Plateforme éducative et solutions technologiques",
-        region: "Littoral"
-      }
-    }),
-    prisma.company.create({
-      data: {
-        name: "Digital Renter",
-        description: "Agence digitale spécialisée en marketing et développement",
-        region: "Ouest"
-      }
-    }),
-    prisma.company.create({
-      data: {
-        name: "Africland",
-        description: "Société immobilière leader au Cameroun",
-        region: "Littoral"
-      }
-    }),
-    prisma.company.create({
-      data: {
-        name: "Camtel",
-        description: "Opérateur télécom national",
-        region: "Centre"
-      }
-    })
-  ]);
+  // 2) Companies
+  console.log(`🏢 Creating ${NUM_COMPANIES} companies…`);
+  const companies: { id: string }[] = [];
+  for (const batch of chunk(Array.from({ length: NUM_COMPANIES }))) {
+    const created = await prisma.$transaction(
+      batch.map(() =>
+        prisma.company.create({
+          data: {
+            name: faker.company.name(),
+            description: faker.lorem.paragraph(),
+            region: faker.helpers.arrayElement(REGIONS),
+          },
+          select: { id: true },
+        })
+      )
+    );
+    companies.push(...created);
+  }
 
-  // Création des recruteurs
-  const recruiters = await prisma.$transaction([
-    prisma.user.create({
-      data: {
-        email: "hr@kiroo.cm",
-        password,
-        name: "Emmanuel Mba",
-        role: "RECRUITER",
-        recruiter: {
-          create: { companyId: companies[0].id }
-        }
-      }
-    }),
-    prisma.user.create({
-      data: {
-        email: "recrutement@jangolo.cm",
-        password,
-        name: "Aïcha Diallo",
-        role: "RECRUITER",
-        recruiter: {
-          create: { companyId: companies[1].id }
-        }
-      }
-    }),
-    prisma.user.create({
-      data: {
-        email: "rh@digitalrenter.cm",
-        password,
-        name: "Franck Mbarga",
-        role: "RECRUITER",
-        recruiter: {
-          create: { companyId: companies[2].id }
-        }
-      }
-    })
-  ]);
+  // 3) Recruiters (Users avec recruiter + company)
+  console.log(`🧑‍💼 Creating ${NUM_RECRUITERS} recruiters…`);
+  const recruiters: { id: string; userId: string; companyId: string }[] = [];
+  for (const batch of chunk(Array.from({ length: NUM_RECRUITERS }))) {
+    const created = await prisma.$transaction(
+      batch.map(() => {
+        const company = faker.helpers.arrayElement(companies);
+        return prisma.user.create({
+          data: {
+            email: faker.internet.email().toLowerCase(),
+            password: passwordHash,
+            name: faker.person.fullName(),
+            role: "RECRUITER",
+            recruiter: {
+              create: { companyId: company.id },
+            },
+          },
+          select: {
+            id: true,
+            recruiter: { select: { id: true, companyId: true } },
+          },
+        });
+      })
+    );
 
-  // Création des candidats
-  const candidates = await prisma.$transaction([
+    for (const u of created) {
+      recruiters.push({
+        id: u.recruiter!.id,
+        userId: u.id,
+        companyId: u.recruiter!.companyId!,
+      });
+    }
+  }
+
+  // 3bis) Ajout de 2-3 recruteurs fixes (optionnel pour te loguer côté UI)
+  await prisma.user.create({
+    data: {
+      email: "hr@kiroo.cm",
+      password: passwordHash,
+      name: "Emmanuel Mba",
+      role: "RECRUITER",
+      recruiter: { create: { companyId: companies[0].id } },
+    },
+  });
+  await prisma.user.create({
+    data: {
+      email: "recrutement@jangolo.cm",
+      password: passwordHash,
+      name: "Aïcha Diallo",
+      role: "RECRUITER",
+      recruiter: { create: { companyId: companies[1].id } },
+    },
+  });
+
+  // 4) Candidates (Users avec candidate)
+  console.log(`🧑‍🎓 Creating ${NUM_CANDIDATES} candidates…`);
+  type CandidateRow = { id: string; userId: string; resumeUrl: string | null };
+  const candidates: CandidateRow[] = [];
+  for (const batch of chunk(Array.from({ length: NUM_CANDIDATES }))) {
+    const created = await prisma.$transaction(
+      batch.map(() =>
+        prisma.user.create({
+          data: {
+            email: faker.internet.email().toLowerCase(),
+            password: passwordHash,
+            name: faker.person.fullName(),
+            role: "CANDIDATE",
+            candidate: {
+              create: {
+                headline: faker.person.jobTitle(),
+                location: faker.location.city(),
+                resumeUrl: faker.internet.url(),
+              },
+            },
+          },
+          select: {
+            id: true,
+            candidate: { select: { id: true, resumeUrl: true } },
+          },
+        })
+      )
+    );
+
+    for (const u of created) {
+      candidates.push({
+        id: u.candidate!.id,
+        userId: u.id,
+        resumeUrl: u.candidate!.resumeUrl ?? null,
+      });
+    }
+  }
+
+  // 4bis) Candidats fixes (optionnel, pour test UI rapide)
+  const fixedCands = await prisma.$transaction([
     prisma.user.create({
       data: {
         email: "jean.kamdem@yahoo.fr",
-        password,
+        password: passwordHash,
         name: "Jean Kamdem",
         role: "CANDIDATE",
         candidate: {
           create: {
             headline: "Développeur Fullstack",
             location: "Douala",
-            resumeUrl: "https://drive.google.com/file/d/1lWEyw1y9F0PwfObDiCsaCDjo8EMW4KEu/view?usp=drive_link"
-          }
-        }
+            resumeUrl: faker.internet.url(),
+          },
+        },
       },
-      include: { candidate: true }, // <-- important
+      select: { candidate: { select: { id: true, resumeUrl: true } } },
     }),
     prisma.user.create({
       data: {
         email: "aicha.mohamadou@gmail.com",
-        password,
+        password: passwordHash,
         name: "Aïcha Mohamadou",
         role: "CANDIDATE",
         candidate: {
           create: {
             headline: "Designer UI/UX",
             location: "Yaoundé",
-            resumeUrl: "https://drive.google.com/file/d/1lWEyw1y9F0PwfObDiCsaCDjo8EMW4KEu/view?usp=drive_link"
-          }
-        }
+            resumeUrl: faker.internet.url(),
+          },
+        },
       },
-      include: { candidate: true }, // <-- important
+      select: { candidate: { select: { id: true, resumeUrl: true } } },
     }),
-    prisma.user.create({
-      data: {
-        email: "mbella.ekobo@hotmail.com",
-        password,
-        name: "Mbella Ekobo",
-        role: "CANDIDATE",
-        candidate: {
-          create: {
-            headline: "Chef de projet digital",
-            location: "Bafoussam",
-            resumeUrl: "https://drive.google.com/file/d/1lWEyw1y9F0PwfObDiCsaCDjo8EMW4KEu/view?usp=drive_link"
-          }
-        }
-      },
-      include: { candidate: true }, // <-- important
-    })
   ]);
+  candidates.push(
+    { id: fixedCands[0].candidate!.id, userId: "", resumeUrl: fixedCands[0].candidate!.resumeUrl },
+    { id: fixedCands[1].candidate!.id, userId: "", resumeUrl: fixedCands[1].candidate!.resumeUrl }
+  );
 
-  // Création des offres d'emploi typiques
-  const jobs = await prisma.$transaction([
-    // Offres Kiro'o Games
+  // 5) Jobs
+  console.log(`📄 Creating ${NUM_JOBS} jobs…`);
+  const jobs: { id: string; companyId: string }[] = [];
+  for (const batch of chunk(Array.from({ length: NUM_JOBS }))) {
+    const created = await prisma.$transaction(
+      batch.map(() => {
+        const company = faker.helpers.arrayElement(companies);
+        return prisma.job.create({
+          data: {
+            title: faker.person.jobTitle(),
+            companyId: company.id,
+            region: faker.helpers.arrayElement(REGIONS),
+            type: faker.helpers.arrayElement(JOB_TYPES),
+            description: faker.lorem.paragraphs({ min: 1, max: 3 }),
+          },
+          select: { id: true, companyId: true },
+        });
+      })
+    );
+    jobs.push(...created);
+  }
+
+  // 5bis) Quelques jobs "connus"
+  await prisma.$transaction([
     prisma.job.create({
       data: {
         title: "Développeur Unity",
         companyId: companies[0].id,
         region: "Centre",
         type: "CDI",
-        description: "Nous recherchons un développeur Unity expérimenté pour rejoindre notre équipe de création de jeux vidéo africains."
-      }
+        description: "Nous recherchons un développeur Unity expérimenté…",
+      },
     }),
     prisma.job.create({
       data: {
@@ -159,106 +247,55 @@ async function main() {
         companyId: companies[0].id,
         region: "Télétravail",
         type: "CDD",
-        description: "Conception de mécaniques de jeu innovantes pour notre prochain titre."
-      }
+        description: "Conception de mécaniques de jeu innovantes…",
+      },
     }),
-
-    // Offres Jangolo
-    prisma.job.create({
-      data: {
-        title: "Développeur Flutter",
-        companyId: companies[1].id,
-        region: "Littoral",
-        type: "CDI",
-        description: "Développement d'applications éducatives mobiles avec Flutter."
-      }
-    }),
-    prisma.job.create({
-      data: {
-        title: "Community Manager",
-        companyId: companies[1].id,
-        region: "Littoral",
-        type: "Stage",
-        description: "Animation des réseaux sociaux et création de contenu éducatif."
-      }
-    }),
-
-    // Offres Digital Renter
-    prisma.job.create({
-      data: {
-        title: "Expert SEO",
-        companyId: companies[2].id,
-        region: "Ouest",
-        type: "Freelance",
-        description: "Optimisation SEO pour nos clients et stratégie de contenu."
-      }
-    }),
-
-    // Offres Africland
-    prisma.job.create({
-      data: {
-        title: "Commercial Immobilier",
-        companyId: companies[3].id,
-        region: "Littoral",
-        type: "CDI",
-        description: "Prospection client et vente de biens immobiliers à Douala."
-      }
-    }),
-
-    // Offres Camtel
-    prisma.job.create({
-      data: {
-        title: "Ingénieur Réseaux",
-        companyId: companies[4].id,
-        region: "Centre",
-        type: "CDI",
-        description: "Maintenance et déploiement des infrastructures réseau."
-      }
-    })
   ]);
 
-// Création de quelques candidatures (sans $transaction ici)
-await prisma.application.createMany({
-  data: [
-    {
-      jobId: jobs[0].id,
-      candidateId: candidates[0].candidate!.id, // <-- id du Candidate
-      message: "Passionné de jeux vidéo avec 2 ans d'expérience sur Unity",
-      cvUrl: candidates[0].candidate!.resumeUrl ?? "https://storage.cv/jean-kamdem.pdf",
-    },
-    {
-      jobId: jobs[2].id,
-      candidateId: candidates[0].candidate!.id,
-      message: "Expérience en développement mobile avec Flutter",
-      cvUrl: candidates[0].candidate!.resumeUrl ?? "https://storage.cv/jean-kamdem.pdf",
-    },
-    {
-      jobId: jobs[1].id,
-      candidateId: candidates[1].candidate!.id,
-      message: "Formation en design et passion pour les jeux vidéo",
-      cvUrl: candidates[1].candidate!.resumeUrl ?? "https://storage.cv/aicha-mohamadou.pdf",
-    },
-    {
-      jobId: jobs[4].id,
-      candidateId: candidates[2].candidate!.id,
-      message: "5 ans d'expérience en gestion de projets digitaux",
-      cvUrl: candidates[2].candidate!.resumeUrl ?? "https://storage.cv/mbella-ekobo.pdf",
-    },
-  ],
-});
+  // 6) Applications (candidatures)
+  console.log("📨 Creating applications… (this can take a bit)");
+  // Pour éviter les doublons (même candidat postulant 2x au même job), on tracke une clé candidateId|jobId
+  const appRows: { jobId: string; candidateId: string; message: string; cvUrl?: string | null; status?: string }[] =
+    [];
 
+  for (const cand of candidates) {
+    const appCount = faker.number.int({ min: MIN_APPS_PER_CANDIDATE, max: MAX_APPS_PER_CANDIDATE });
+    const pickedJobs = faker.helpers.arrayElements(jobs, appCount);
 
-  console.log("Seed complet avec succès !");
+    for (const j of pickedJobs) {
+      appRows.push({
+        jobId: j.id,
+        candidateId: cand.id,
+        message: faker.lorem.sentences({ min: 1, max: 2 }),
+        cvUrl: cand.resumeUrl || faker.internet.url(),
+        status: faker.helpers.arrayElement(APP_STATUSES),
+      });
+    }
+  }
+
+  // insert en paquets
+  let inserted = 0;
+  for (const part of chunk(appRows, 1000)) {
+    // createMany est très rapide ici car on a des IDs existants
+    await prisma.application.createMany({ data: part });
+    inserted += part.length;
+    if (inserted % 5000 === 0) console.log(`  → ${inserted} applications`);
+  }
+
+  console.log("✅ Seed OK!");
   console.table({
     Companies: companies.length,
-    Recruiters: recruiters.length,
+    Recruiters: recruiters.length + 2, // + ceux ajoutés en fixe
     Candidates: candidates.length,
-    Jobs: jobs.length
+    Jobs: jobs.length + 2,             // + ceux ajoutés en fixe
+    Applications: appRows.length,
   });
+
+  console.timeEnd("seed_total");
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error(e);
     process.exit(1);
   })

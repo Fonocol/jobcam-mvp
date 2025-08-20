@@ -42,7 +42,12 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                 <p className="text-sm text-gray-600">{job.type}</p>
               </Link>
             ))}
+             <Link href={`/companies/${company.id}/jobs`} className="text-blue-600 hover:underline">
+              Voir toutes les offres →
+              </Link>
           </div>
+         
+
         ) : (
           <p>Aucune offre disponible</p>
         )}

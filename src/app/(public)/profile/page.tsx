@@ -45,7 +45,7 @@ export default function ProfilePage() {
       setError("Not authenticated");
       return;
     }
-    setRole((session.user as any).role ?? null);
+    setRole((session.user).role ?? null);
     const uid = (session.user as any).id;
 
     async function load() {
@@ -136,7 +136,7 @@ export default function ProfilePage() {
           <>
             <h2>Entreprise</h2>
             <div>
-              <label>Nom de l'entreprise</label>
+              <label>Nom de l&apos;entreprise</label>
               <br />
               <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
             </div>
