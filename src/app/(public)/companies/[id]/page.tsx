@@ -1,22 +1,28 @@
+// src/app/(public)/companies/[id]/page.tsx
 import CompanyBanner from "@/components/CompanyBanner";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
-export default async function CompanyPage({ params }: { params: { id: string } }) {
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function CompanyPage({ params }: Props) {
+  const { id } = await params; // <- important : await ici
   const company = await prisma.company.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       jobs: {
         select: {
           id: true,
           title: true,
           type: true,
-          createdAt: true
+          createdAt: true,
         },
-        orderBy: { createdAt: 'desc' },
-        take: 5
-      }
-    }
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+    },
   });
 
   if (!company) return <div>Entreprise non trouvée</div>;
@@ -24,7 +30,6 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="mb-8">
-        {/* Réutilisez le même composant de bannière */}
         <CompanyBanner company={company} />
       </div>
 
@@ -32,9 +37,9 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         <h2 className="text-xl font-bold mb-4">Offres récentes</h2>
         {company.jobs.length > 0 ? (
           <div className="space-y-3">
-            {company.jobs.map(job => (
-              <Link 
-                key={job.id} 
+            {company.jobs.map((job) => (
+              <Link
+                key={job.id}
                 href={`/jobs/${job.id}`}
                 className="block p-3 border rounded hover:bg-gray-50"
               >
@@ -42,12 +47,10 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                 <p className="text-sm text-gray-600">{job.type}</p>
               </Link>
             ))}
-             <Link href={`/companies/${company.id}/jobs`} className="text-blue-600 hover:underline">
+            <Link href={`/companies/${company.id}/jobs`} className="text-blue-600 hover:underline">
               Voir toutes les offres →
-              </Link>
+            </Link>
           </div>
-         
-
         ) : (
           <p>Aucune offre disponible</p>
         )}
@@ -55,5 +58,3 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     </div>
   );
 }
-
-
