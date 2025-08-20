@@ -1,8 +1,12 @@
 // prisma/seed.ts
+// @ts-ignore - Ignorer l'erreur TypeScript temporairement
+
+// prisma/seed.ts
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { faker } from "@faker-js/faker";
 
+// @ts-ignore
 const prisma = new PrismaClient();
 
 // ----------------------
