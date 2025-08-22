@@ -1,13 +1,20 @@
 // src/app/api/companies/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { faker } from "@faker-js/faker";
+import { CompanyRole } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authConfig } from "@/auth.config";
+
+function slugify(str: string) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
-    // Si id fourni -> comportement existant : retourne une company
     if (id) {
       const company = await prisma.company.findUnique({
         where: { id },
@@ -23,7 +30,7 @@ export async function GET(request: Request) {
       return NextResponse.json(company);
     }
 
-    // Sinon -> LISTE avec recherche / filtres / pagination
+    // Liste + filtres
     const q = (searchParams.get("q") || "").trim();
     const region = (searchParams.get("region") || "").trim();
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
@@ -57,7 +64,6 @@ export async function GET(request: Request) {
           name: true,
           description: true,
           region: true,
-          // Optionnel: nombre d'offres pour chaque entreprise
           _count: { select: { jobs: true } },
         },
       }),
@@ -70,43 +76,76 @@ export async function GET(request: Request) {
   }
 }
 
-// (Garde le POST / PUT / etc. tels quels — inchangés)
+// CREATE company -> set recruiter as COMPANY_MANAGER
 export async function POST(request: Request) {
   try {
-    const { name, description, region, userId } = await request.json();
+    // Option A: utiliser la session (recommandé)
+    const session = await getServerSession(authConfig);
+    const { name, description, region, city, website, userId: bodyUserId } = await request.json();
+
+    // soit on prend l'id de la session, soit on tolère body.userId (MVP)
+    const userId = session?.user?.id ?? bodyUserId;
 
     if (!name || !region || !userId) {
-      return NextResponse.json({ error: "Nom et région sont obligatoires" }, { status: 400 });
+      return NextResponse.json({ error: "Nom, région et userId sont requis" }, { status: 400 });
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const company = await tx.company.create({
-        data: { name, description, region },
+    const me = await prisma.recruiter.findUnique({
+      where: { userId },
+      select: { id: true, companyId: true },
+    });
+    if (!me) return NextResponse.json({ error: "Recruiter not found" }, { status: 404 });
+    if (me.companyId) return NextResponse.json({ error: "Recruiter already has a company" }, { status: 400 });
+
+    const company = await prisma.$transaction(async (tx) => {
+      const created = await tx.company.create({
+        data: {
+          name,
+          description,
+          region,
+          city,
+          website,
+          slug: `${slugify(name)}-${faker.string.alphanumeric(4).toLowerCase()}`,
+        },
       });
 
       await tx.recruiter.update({
         where: { userId },
-        data: { companyId: company.id },
+        data: { companyId: created.id, roleInCompany: CompanyRole.COMPANY_MANAGER },
       });
 
-      return company;
+      return created;
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(company);
   } catch (error) {
     console.error("Error creating company:", error);
     return NextResponse.json({ error: "Erreur lors de la création" }, { status: 500 });
   }
 }
 
+// UPDATE company -> only COMPANY_MANAGER of that company
 export async function PUT(request: Request) {
   try {
-    const { id, ...data } = await request.json();
+    const session = await getServerSession(authConfig);
+    const { id, name, description, region, city, website } = await request.json();
     if (!id) return NextResponse.json({ error: "Company ID is required" }, { status: 400 });
+
+    // vérifie le rôle du recruteur connecté
+    const me = await prisma.recruiter.findUnique({
+      where: { userId: session?.user?.id ?? "" },
+      select: { companyId: true, roleInCompany: true },
+    });
+    if (!me || me.companyId !== id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (me.roleInCompany !== "COMPANY_MANAGER") {
+      return NextResponse.json({ error: "Only managers can update company" }, { status: 403 });
+    }
 
     const updatedCompany = await prisma.company.update({
       where: { id },
-      data: { name: data.name, description: data.description, region: data.region },
+      data: { name, description, region, city, website },
     });
 
     return NextResponse.json(updatedCompany);

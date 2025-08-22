@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authConfig } from "@/auth.config";
+import { faker } from "@faker-js/faker";
+
+function slugify(str: string) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -17,7 +22,7 @@ export async function GET(request: Request) {
         userId: true,
         companyId: true,
         User: { select: { id: true, name: true, email: true, role: true, createdAt: true } },
-        company: { select: { id: true, name: true, description: true, region: true } },
+        Company: { select: { id: true, name: true, description: true, region: true } },
       },
     });
 
@@ -74,7 +79,7 @@ export async function PATCH(request: Request) {
         // create company and link recruiter
         updates.push(
           prisma.company.create({
-            data: { name: compName, description, region },
+            data: { name: compName, description, region,slug:slugify(name) + "-" + faker.number.int({ min: 1000, max: 9999 }), },
             select: { id: true, name: true, description: true, region: true },
           })
         );
@@ -103,7 +108,7 @@ export async function PATCH(request: Request) {
         userId: true,
         companyId: true,
         User: { select: { id: true, name: true, email: true } },
-        company: { select: { id: true, name: true, description: true, region: true } },
+        Company: { select: { id: true, name: true, description: true, region: true } },
       },
     });
 

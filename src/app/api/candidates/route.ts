@@ -16,7 +16,7 @@ export async function GET(request: Request) {
         id: true,
         userId: true,
         headline: true,
-        location: true,
+        locationState: true,
         resumeUrl: true,
         User: { select: { id: true, name: true, email: true, role: true, createdAt: true } },
         applications: { take: 5, orderBy: { createdAt: "desc" }, select: { id: true, jobId: true, createdAt: true, status: true } },
@@ -38,7 +38,7 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     // body may contain: name (user), headline, location, resumeUrl
-    const { name, headline, location, resumeUrl } = body;
+    const { name, headline, locationState, resumeUrl } = body;
 
     const candidate = await prisma.candidate.findUnique({ where: { userId: session.user.id } });
     if (!candidate) return NextResponse.json({ error: "Candidate not found" }, { status: 404 });
@@ -48,10 +48,10 @@ export async function PATCH(request: Request) {
       where: { id: candidate.id },
       data: {
         ...(headline !== undefined ? { headline } : {}),
-        ...(location !== undefined ? { location } : {}),
+        ...(locationState !== undefined ? { locationState } : {}),
         ...(resumeUrl !== undefined ? { resumeUrl } : {}),
       },
-      select: { id: true, headline: true, location: true, resumeUrl: true },
+      select: { id: true, headline: true, locationState: true, resumeUrl: true },
     });
 
     // Optionally update user.name

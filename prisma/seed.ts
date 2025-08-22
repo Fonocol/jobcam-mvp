@@ -1,30 +1,19 @@
 // prisma/seed.ts
-// @ts-ignore - Ignorer l'erreur TypeScript temporairement
-
-// prisma/seed.ts
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Role, JobType, ApplicationStatus, RemoteType, JobStatus, Currency } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { faker } from "@faker-js/faker";
 
-// @ts-ignore
 const prisma = new PrismaClient();
 
 // ----------------------
-// Paramètres (ajuste librement)
-// ----------------------
+// Paramètres (ajuste si besoin)
 const PASSWORD_PLAINTEXT = "test1234";
-const NUM_COMPANIES = 15;
+const NUM_COMPANIES = 12;
 const NUM_RECRUITERS = 40;
-const NUM_CANDIDATES = 400;
-const NUM_JOBS = 1200;
-
-// Chaque candidat postulera entre 1 et 5 offres
+const NUM_CANDIDATES = 200;
+const NUM_JOBS = 300;
 const MIN_APPS_PER_CANDIDATE = 1;
-const MAX_APPS_PER_CANDIDATE = 5;
-
-// Traitement en paquets pour aller plus vite sans saturer la DB
-const CHUNK_SIZE = 50;
-
+const MAX_APPS_PER_CANDIDATE = 4;
 const REGIONS = [
   "Centre",
   "Littoral",
@@ -36,262 +25,249 @@ const REGIONS = [
   "Adamaoua",
   "Télétravail",
 ];
-const JOB_TYPES = ["CDI", "CDD", "Stage", "Freelance", "Alternance"];
-const APP_STATUSES = ["PENDING", "REVIEW", "ACCEPTED", "REJECTED"];
-
 // ----------------------
-function chunk<T>(arr: T[], size = CHUNK_SIZE): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+
+function slugify(str: string) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 async function main() {
   console.time("seed_total");
   faker.seed(42);
-
   const passwordHash = await bcrypt.hash(PASSWORD_PLAINTEXT, 10);
 
-  // 1) Nettoyage (respecter l'ordre des FK)
+  // Cleanup (ordre FK)
   console.log("🧹 Cleaning DB…");
   await prisma.application.deleteMany();
   await prisma.job.deleteMany();
+  await prisma.companyFollow.deleteMany();
+  await prisma.experience.deleteMany();
+  await prisma.education.deleteMany();
   await prisma.candidate.deleteMany();
   await prisma.recruiter.deleteMany();
   await prisma.company.deleteMany();
   await prisma.user.deleteMany();
 
-  // 2) Companies
+  // 1) Companies
   console.log(`🏢 Creating ${NUM_COMPANIES} companies…`);
-  const companies: { id: string }[] = [];
-  for (const batch of chunk(Array.from({ length: NUM_COMPANIES }))) {
-    const created = await prisma.$transaction(
-      batch.map(() =>
-        prisma.company.create({
-          data: {
-            name: faker.company.name(),
-            description: faker.lorem.paragraph(),
-            region: faker.helpers.arrayElement(REGIONS),
-          },
-          select: { id: true },
-        })
-      )
-    );
-    companies.push(...created);
+  const companies = [];
+  for (let i = 0; i < NUM_COMPANIES; i++) {
+    const name = faker.company.name() + (i % 3 === 0 ? " SARL" : "");
+    const c = await prisma.company.create({
+      data: {
+        name,
+        slug: `${slugify(name)}-${faker.string.alphanumeric(4)}`,
+        description: faker.company.catchPhrase(),
+        region: faker.helpers.arrayElement(REGIONS),
+        city: faker.location.city(),
+        website: faker.internet.url(),
+        industry: faker.commerce.department(),
+        size: faker.helpers.arrayElement(["1-10", "11-50", "51-200", "200+"]),
+        verified: faker.datatype.boolean(),
+      },
+    });
+    companies.push(c);
   }
 
-  // 3) Recruiters (Users avec recruiter + company)
-  console.log(`🧑‍💼 Creating ${NUM_RECRUITERS} recruiters…`);
-  const recruiters: { id: string; userId: string; companyId: string }[] = [];
-  for (const batch of chunk(Array.from({ length: NUM_RECRUITERS }))) {
-    const created = await prisma.$transaction(
-      batch.map(() => {
-        const company = faker.helpers.arrayElement(companies);
-        return prisma.user.create({
-          data: {
-            email: faker.internet.email().toLowerCase(),
-            password: passwordHash,
-            name: faker.person.fullName(),
-            role: "RECRUITER",
-            recruiter: {
-              create: { companyId: company.id },
-            },
+  // 2) Recruiters (create user + recruiter) and map company -> recruiters
+  console.log(`🧑‍💼 Creating ${NUM_RECRUITERS} recruiters and users…`);
+  const companyToRecruiters: Record<string, { userId: string; recruiterId: string }[]> = {};
+  for (let i = 0; i < NUM_RECRUITERS; i++) {
+    const company = faker.helpers.arrayElement(companies);
+    const user = await prisma.user.create({
+      data: {
+        email: faker.internet.email().toLowerCase(),
+        password: passwordHash,
+        name: faker.person.fullName(),
+        role: Role.RECRUITER,
+        recruiter: {
+          create: {
+            companyId: company.id,
+            title: faker.person.jobTitle(),
           },
-          select: {
-            id: true,
-            recruiter: { select: { id: true, companyId: true } },
-          },
-        });
-      })
-    );
+        },
+      },
+      include: { recruiter: true },
+    });
 
-    for (const u of created) {
-      recruiters.push({
-        id: u.recruiter!.id,
-        userId: u.id,
-        companyId: u.recruiter!.companyId!,
-      });
-    }
+    const recInfo = { userId: user.id, recruiterId: user.recruiter!.id };
+    if (!companyToRecruiters[company.id]) companyToRecruiters[company.id] = [];
+    companyToRecruiters[company.id].push(recInfo);
   }
 
-  // 3bis) Ajout de 2-3 recruteurs fixes (optionnel pour te loguer côté UI)
-  await prisma.user.create({
+  // 2bis) add a few fixed recruiters (dev login)
+  const fixed1 = await prisma.user.create({
     data: {
       email: "hr@kiroo.cm",
       password: passwordHash,
       name: "Emmanuel Mba",
-      role: "RECRUITER",
-      recruiter: { create: { companyId: companies[0].id } },
+      role: Role.RECRUITER,
+      recruiter: { create: { companyId: companies[0].id, title: "HR Manager" } },
     },
+    include: { recruiter: true },
   });
-  await prisma.user.create({
+  companyToRecruiters[companies[0].id].push({ userId: fixed1.id, recruiterId: fixed1.recruiter!.id });
+
+  const fixed2 = await prisma.user.create({
     data: {
       email: "recrutement@jangolo.cm",
       password: passwordHash,
       name: "Aïcha Diallo",
-      role: "RECRUITER",
-      recruiter: { create: { companyId: companies[1].id } },
+      role: Role.RECRUITER,
+      recruiter: { create: { companyId: companies[1].id, title: "Talent Lead" } },
     },
+    include: { recruiter: true },
   });
+  companyToRecruiters[companies[1].id].push({ userId: fixed2.id, recruiterId: fixed2.recruiter!.id });
 
-  // 4) Candidates (Users avec candidate)
+  // 3) Candidates (users + candidate) + experiences & educations
   console.log(`🧑‍🎓 Creating ${NUM_CANDIDATES} candidates…`);
-  type CandidateRow = { id: string; userId: string; resumeUrl: string | null };
-  const candidates: CandidateRow[] = [];
-  for (const batch of chunk(Array.from({ length: NUM_CANDIDATES }))) {
-    const created = await prisma.$transaction(
-      batch.map(() =>
-        prisma.user.create({
-          data: {
-            email: faker.internet.email().toLowerCase(),
-            password: passwordHash,
-            name: faker.person.fullName(),
-            role: "CANDIDATE",
-            candidate: {
-              create: {
-                headline: faker.person.jobTitle(),
-                location: faker.location.city(),
-                resumeUrl: faker.internet.url(),
-              },
-            },
+  const candidates: { id: string; resumeUrl?: string | null }[] = [];
+  for (let i = 0; i < NUM_CANDIDATES; i++) {
+    const email = faker.internet.email().toLowerCase();
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: passwordHash,
+        name: faker.person.fullName(),
+        role: Role.CANDIDATE,
+        candidate: {
+          create: {
+            headline: faker.person.jobTitle(),
+            bio: faker.lorem.paragraph(),
+            locationCity: faker.location.city(),
+            locationCountry: "Cameroun",
+            resumeUrl: faker.internet.url(),
+            skills: faker.helpers.arrayElements(["JavaScript", "Python", "React", "Node.js", "SQL", "Design", "DevOps", "UI/UX"], { min: 2, max: 5 }),
+            links: { linkedin: faker.internet.url(), website: faker.internet.url() },
           },
-          select: {
-            id: true,
-            candidate: { select: { id: true, resumeUrl: true } },
-          },
-        })
-      )
-    );
+        },
+      },
+      include: { candidate: true },
+    });
 
-    for (const u of created) {
-      candidates.push({
-        id: u.candidate!.id,
-        userId: u.id,
-        resumeUrl: u.candidate!.resumeUrl ?? null,
+    // experiences
+    const expCount = faker.number.int({ min: 0, max: 3 });
+    for (let e = 0; e < expCount; e++) {
+      await prisma.experience.create({
+        data: {
+          candidateId: user.candidate!.id,
+          title: faker.person.jobTitle(),
+          company: faker.company.name(),
+          startDate: faker.date.past({ years: 5 }),
+          endDate: faker.datatype.boolean() ? faker.date.recent({ days: 30 }) : null,
+          description: faker.lorem.sentences(2),
+        },
       });
     }
+
+    // educations
+    const eduCount = faker.number.int({ min: 0, max: 2 });
+    for (let ed = 0; ed < eduCount; ed++) {
+      await prisma.education.create({
+        data: {
+          candidateId: user.candidate!.id,
+          school: faker.company.name() + " University",
+          degree: faker.helpers.arrayElement(["Licence", "Master", "Certificat"]),
+          field: faker.helpers.arrayElement(["Informatique", "Design", "Finance", "Marketing"]),
+          startDate: faker.date.past({ years: 6 }),
+          endDate: faker.datatype.boolean() ? faker.date.past({ years: 1 }) : null,
+        },
+      });
+    }
+
+    candidates.push({ id: user.candidate!.id, resumeUrl: user.candidate!.resumeUrl ?? null });
   }
 
-  // 4bis) Candidats fixes (optionnel, pour test UI rapide)
-  const fixedCands = await prisma.$transaction([
-    prisma.user.create({
-      data: {
-        email: "jean.kamdem@yahoo.fr",
-        password: passwordHash,
-        name: "Jean Kamdem",
-        role: "CANDIDATE",
-        candidate: {
-          create: {
-            headline: "Développeur Fullstack",
-            location: "Douala",
-            resumeUrl: faker.internet.url(),
-          },
-        },
-      },
-      select: { candidate: { select: { id: true, resumeUrl: true } } },
-    }),
-    prisma.user.create({
-      data: {
-        email: "aicha.mohamadou@gmail.com",
-        password: passwordHash,
-        name: "Aïcha Mohamadou",
-        role: "CANDIDATE",
-        candidate: {
-          create: {
-            headline: "Designer UI/UX",
-            location: "Yaoundé",
-            resumeUrl: faker.internet.url(),
-          },
-        },
-      },
-      select: { candidate: { select: { id: true, resumeUrl: true } } },
-    }),
-  ]);
-  candidates.push(
-    { id: fixedCands[0].candidate!.id, userId: "", resumeUrl: fixedCands[0].candidate!.resumeUrl },
-    { id: fixedCands[1].candidate!.id, userId: "", resumeUrl: fixedCands[1].candidate!.resumeUrl }
-  );
-
-  // 5) Jobs
+  // 4) Jobs (création + assign postedById si recruteur dispo pour cette company)
   console.log(`📄 Creating ${NUM_JOBS} jobs…`);
-  const jobs: { id: string; companyId: string }[] = [];
-  for (const batch of chunk(Array.from({ length: NUM_JOBS }))) {
-    const created = await prisma.$transaction(
-      batch.map(() => {
-        const company = faker.helpers.arrayElement(companies);
-        return prisma.job.create({
-          data: {
-            title: faker.person.jobTitle(),
-            companyId: company.id,
-            region: faker.helpers.arrayElement(REGIONS),
-            type: faker.helpers.arrayElement(JOB_TYPES),
-            description: faker.lorem.paragraphs({ min: 1, max: 3 }),
-          },
-          select: { id: true, companyId: true },
-        });
-      })
-    );
-    jobs.push(...created);
+  const jobs = [];
+  for (let i = 0; i < NUM_JOBS; i++) {
+    const company = faker.helpers.arrayElement(companies);
+    const title = faker.person.jobTitle();
+    // choose a recruiter for this company if any
+    const recs = companyToRecruiters[company.id] ?? [];
+    const pickedRec = recs.length > 0 ? faker.helpers.arrayElement(recs) : null;
+
+    const j = await prisma.job.create({
+      data: {
+        title,
+        slug: `${slugify(title)}-${faker.string.alphanumeric(4)}`,
+        companyId: company.id,
+        postedById: pickedRec!.recruiterId,
+        region: faker.helpers.arrayElement(REGIONS),
+        city: faker.location.city(),
+        type: faker.helpers.arrayElement(Object.values(JobType)),
+        remoteType: faker.helpers.arrayElement(Object.values(RemoteType)),
+        description: faker.lorem.paragraphs({ min: 1, max: 2 }),
+        requirements: faker.lorem.sentences({ min: 1, max: 3 }),
+        responsibilities: faker.lorem.sentences({ min: 1, max: 3 }),
+        status: JobStatus.PUBLISHED,
+        salaryMin: faker.number.int({ min: 150000, max: 400000 }),
+        salaryMax: faker.number.int({ min: 400001, max: 1200000 }),
+        currency: Currency.XAF,
+        publishedAt: new Date(),
+        tags: faker.helpers.arrayElements(["Remote", "Agile", "FinTech", "AI", "Cloud", "HealthTech"], { min: 1, max: 3 }),
+      },
+    });
+    jobs.push(j);
   }
 
-  // 5bis) Quelques jobs "connus"
-  await prisma.$transaction([
-    prisma.job.create({
-      data: {
-        title: "Développeur Unity",
-        companyId: companies[0].id,
-        region: "Centre",
-        type: "CDI",
-        description: "Nous recherchons un développeur Unity expérimenté…",
-      },
-    }),
-    prisma.job.create({
-      data: {
-        title: "Game Designer",
-        companyId: companies[0].id,
-        region: "Télétravail",
-        type: "CDD",
-        description: "Conception de mécaniques de jeu innovantes…",
-      },
-    }),
-  ]);
+  // 5) CompanyFollow (quelques follows aléatoires pour tester)
+  console.log("⭐ Creating random company follows...");
+  const followOps = [];
+  for (const comp of companies) {
+    // pick few candidates to follow this company
+    const toFollow = faker.helpers.arrayElements(candidates, faker.number.int({ min: 0, max: 6 }));
+    for (const f of toFollow) {
+      followOps.push(
+        prisma.companyFollow.create({
+          data: { companyId: comp.id, candidateId: f.id },
+        })
+      );
+    }
+  }
+  // execute in smaller batches
+  for (let i = 0; i < followOps.length; i += 50) {
+    await prisma.$transaction(followOps.slice(i, i + 50));
+  }
 
-  // 6) Applications (candidatures)
-  console.log("📨 Creating applications… (this can take a bit)");
-  // Pour éviter les doublons (même candidat postulant 2x au même job), on tracke une clé candidateId|jobId
-  const appRows: { jobId: string; candidateId: string; message: string; cvUrl?: string | null; status?: string }[] =
-    [];
+  // 6) Applications (éviter duplications : utiliser Set)
+  console.log("📨 Creating applications...");
+  const appRows: { jobId: string; candidateId: string; message: string; cvUrl?: string; status: ApplicationStatus }[] = [];
+  const jobIds = jobs.map(j => j.id);
 
   for (const cand of candidates) {
     const appCount = faker.number.int({ min: MIN_APPS_PER_CANDIDATE, max: MAX_APPS_PER_CANDIDATE });
-    const pickedJobs = faker.helpers.arrayElements(jobs, appCount);
+    const picked = faker.helpers.arrayElements(jobIds, appCount);
 
-    for (const j of pickedJobs) {
+    const seen = new Set<string>();
+    for (const jobId of picked) {
+      if (seen.has(`${cand.id}:${jobId}`)) continue;
+      seen.add(`${cand.id}:${jobId}`);
       appRows.push({
-        jobId: j.id,
+        jobId,
         candidateId: cand.id,
         message: faker.lorem.sentences({ min: 1, max: 2 }),
-        cvUrl: cand.resumeUrl || faker.internet.url(),
-        status: faker.helpers.arrayElement(APP_STATUSES),
+        cvUrl: cand.resumeUrl ?? faker.internet.url(),
+        status: faker.helpers.arrayElement(Object.values(ApplicationStatus)),
       });
     }
   }
 
-  // insert en paquets
-  let inserted = 0;
-  for (const part of chunk(appRows, 1000)) {
-    // createMany est très rapide ici car on a des IDs existants
-    await prisma.application.createMany({ data: part });
-    inserted += part.length;
-    if (inserted % 5000 === 0) console.log(`  → ${inserted} applications`);
+  // insert applications in batches
+  for (let i = 0; i < appRows.length; i += 1000) {
+    const batch = appRows.slice(i, i + 1000);
+    await prisma.application.createMany({ data: batch });
+    if ((i / 1000) % 5 === 0) console.log(`  → inserted ${Math.min(i + 1000, appRows.length)} / ${appRows.length}`);
   }
 
-  console.log("✅ Seed OK!");
+  console.log("✅ Seed terminé !");
   console.table({
     Companies: companies.length,
-    Recruiters: recruiters.length + 2, // + ceux ajoutés en fixe
+    Recruiters: Object.values(companyToRecruiters).flat().length,
     Candidates: candidates.length,
-    Jobs: jobs.length + 2,             // + ceux ajoutés en fixe
+    Jobs: jobs.length,
     Applications: appRows.length,
   });
 

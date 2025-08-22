@@ -15,7 +15,7 @@ type CandidatePayload = {
   id: string;
   userId: string;
   headline?: string | null;
-  location?: string | null;
+  locationState?: string | null;
   resumeUrl?: string | null;
   User: { id: string; name: string; email: string };
 };
@@ -35,7 +35,7 @@ export default function ProfilePage() {
   const [companyDesc, setCompanyDesc] = useState("");
   const [companyRegion, setCompanyRegion] = useState("");
   const [headline, setHeadline] = useState("");
-  const [location, setLocation] = useState("");
+  const [locationState, setLocation] = useState("");
   const [resumeUrl, setResumeUrl] = useState("");
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function ProfilePage() {
           setCandidate(data);
           setName(data.User?.name ?? "");
           setHeadline(data.headline ?? "");
-          setLocation(data.location ?? "");
+          setLocation(data.locationState ?? "");
           setResumeUrl(data.resumeUrl ?? "");
         }
       } catch (err: any) {
@@ -100,7 +100,7 @@ export default function ProfilePage() {
         const json = await res.json();
         setRecruiter(json.recruiter);
       } else {
-        const body = { name, headline, location, resumeUrl };
+        const body = { name, headline,locationState, resumeUrl };
         const res = await fetch("/api/candidates", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -164,7 +164,7 @@ export default function ProfilePage() {
             <div>
               <label>Localisation</label>
               <br />
-              <input value={location} onChange={(e) => setLocation(e.target.value)} />
+              <input value={locationState} onChange={(e) => setLocation(e.target.value)} />
             </div>
             <div>
               <label>URL CV (resumeUrl)</label>

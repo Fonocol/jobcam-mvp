@@ -7,84 +7,244 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  name      String?
+  role      Role       @default(CANDIDATE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  candidate Candidate?
+  recruiter Recruiter?
+  sessions  Session[]
+
+  @@index([email])
+}
+
+model Candidate {
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  headline        String?
+  bio             String?
+  locationCity    String?
+  locationState   String?
+  locationCountry String?
+  phone           String?
+  resumeUrl       String?
+  avatarUrl       String?
+  dob             DateTime?
+  visibility      Boolean         @default(true)
+  skills          String[]
+  links           Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+  applications    Application[]
+  User            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  CompanyFollow   CompanyFollow[]
+  educations      Education[]
+  experiences     Experience[]
+
+  @@index([locationCountry, locationCity])
+}
+
+model Experience {
+  id          String    @id @default(cuid())
+  candidateId String
+  title       String
+  company     String?
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+  currently   Boolean   @default(false)
+  Candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Education {
+  id          String    @id @default(cuid())
+  candidateId String
+  school      String
+  degree      String?
+  field       String?
+  startDate   DateTime?
+  endDate     DateTime?
+  Candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Recruiter {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  title     String?
+  phone     String?
+  companyId String?
+  roleInCompany CompanyRole @default(MEMBER) // <- NEW
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  Company   Company? @relation(fields: [companyId], references: [id])
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  Job Job[] @relation("RecruiterJobs")
+}
+
+model Company {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  description String?
+  website     String?
+  logoUrl     String?
+  coverUrl    String?
+  region      String?
+  city        String?
+  address     String?
+  industry    String?
+  size        String?
+  foundedAt   DateTime?
+  verified    Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+  followers   CompanyFollow[]
+  jobs        Job[]
+  recruiters  Recruiter[]
+
+  @@index([region, city])
+  @@index([industry])
+}
+
+model CompanyFollow {
+  id          String    @id @default(cuid())
+  companyId   String
+  candidateId String
+  createdAt   DateTime  @default(now())
+  Candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  Company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, candidateId])
+}
+
+model Job {
+  id               String        @id @default(cuid())
+  title            String
+  postedById       String       // <-- nouveau champ nullable (ajoute)
+  postedBy         Recruiter     @relation("RecruiterJobs", fields: [postedById], references: [id], onDelete: Cascade)
+
+  slug             String        @unique
+  companyId        String
+  region           String?
+  city             String?
+  type             JobType?
+  remoteType       RemoteType    @default(ONSITE)
+  description      String
+  responsibilities String?
+  requirements     String?
+  salaryMin        Int?
+  salaryMax        Int?
+  currency         Currency?     @default(XAF)
+  seniority        String?
+  tags             String[]
+  perks            String?
+  status           JobStatus     @default(DRAFT)
+  publishedAt      DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+  applications     Application[]
+  Company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([region, city])
+  @@index([status])
+  @@index([type])
+  @@index([postedById])
+}
+
+model Application {
+  id           String            @id @default(cuid())
+  jobId        String
+  candidateId  String
+  message      String?
+  cvUrl        String?
+  portfolioUrl String?
+  status       ApplicationStatus @default(PENDING)
+  stage        String?
+  seenAt       DateTime?
+  reviewedAt   DateTime?
+  reviewedById String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  Candidate    Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  Job          Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, candidateId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Optionnel: next-auth session storage (si tu veux persister sessions)
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  expires      DateTime
+  sessionToken String   @unique
+  accessToken  String?  @unique
+  createdAt    DateTime @default(now())
+  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Enums
 enum Role {
   CANDIDATE
   RECRUITER
   ADMIN
 }
 
-model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  password  String
-  name      String
-  role      Role      @default(CANDIDATE)
-  createdAt DateTime  @default(now())
-  candidate Candidate?
-  recruiter Recruiter?
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
+  VOLUNTEER
+  OTHER
 }
 
-model Candidate {
-  id           String       @id @default(cuid())
-  userId       String       @unique
-  headline     String?
-  location     String?
-  resumeUrl    String?
-  User         User         @relation(fields: [userId], references: [id])
-  applications Application[]
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
 }
 
-model Recruiter {
-  id        String  @id @default(cuid())
-  userId    String  @unique
-  companyId String?
-  User      User     @relation(fields: [userId], references: [id])
-
-  // relation vers Company (optionnelle)
-  company   Company? @relation(fields: [companyId], references: [id])
+enum RemoteType {
+  ONSITE
+  HYBRID
+  REMOTE
+  ANY
 }
 
-model Company {
-  id          String  @id @default(cuid())
-  name        String
-  description String?
-  region      String?
-  createdAt   DateTime @default(now())
-
-  // back-relation vers Recruiter
-  recruiters  Recruiter[]
-
-  // tes autres relations
-  jobs        Job[]
-
-  @@index([region])
+enum ApplicationStatus {
+  PENDING
+  REVIEWED
+  INTERVIEW
+  REJECTED
+  HIRED
+  WITHDRAWN
 }
 
-
-model Job {
-  id           String        @id @default(cuid())
-  title        String
-  companyId    String
-  region       String?
-  type         String?        // CDI, CDD, Stage...
-  description  String
-  createdAt    DateTime      @default(now())
-  Company      Company       @relation(fields: [companyId], references: [id])
-  applications Application[]
-
-  @@index([createdAt])
-  @@index([region])
-  @@index([type])
+enum Currency {
+  XAF
+  EUR
+  USD
+  GBP
+  OTHER
 }
 
-model Application {
-  id          String    @id @default(cuid())
-  jobId       String
-  candidateId String
-  message     String?
-  cvUrl       String?
-  status      String?   @default("PENDING") // Ajoutez ce champ
-  createdAt   DateTime  @default(now())
-  Job         Job       @relation(fields: [jobId], references: [id])
-  Candidate   Candidate @relation(fields: [candidateId], references: [id])
+// --- enums
+enum CompanyRole {
+  COMPANY_MANAGER
+  MEMBER
 }

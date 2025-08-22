@@ -1,145 +1,185 @@
+// src/components/CompanyBanner.tsx
 "use client";
 
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-export default function CompanyBanner({ company }: {
+type BannerProps = {
   company: {
     id: string;
     name: string;
-    description?: string | null;
+    slug?: string;
+    description?: string;
     region?: string | null;
-    logoUrl?: string | null ;
+    city?: string | null;
+    logoUrl?: string | null;
+    coverUrl?: string | null;
     website?: string | null;
-    tags?: string[];
+    size?: string | null;
+    verified?: boolean;
     jobsCount?: number;
-    employeesCount?: number;
-  }
-}) {
-  const [followed, setFollowed] = useState(false);
+    recruitersCount?: number;
+    followersCount?: number;
+  };
+};
 
-  // Placeholder images (MVP) - remplacer plus tard par des images réelles
-  const placeholders = [
-    "/placeholders/office-1.png",
-    "/placeholders/office-2.png",
-    "/placeholders/office-3.png"
-  ];
+export default function CompanyBanner({ company }: BannerProps) {
+  const [followed, setFollowed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    try {
+      const key = `company_follow_${company.id}`;
+      setFollowed(localStorage.getItem(key) === "1");
+    } catch (e) {}
+  }, [company.id]);
+
+  async function toggleFollow() {
+    if (loading) return;
+    setLoading(true);
+    const key = `company_follow_${company.id}`;
+    const next = !followed;
+    setFollowed(next); // optimistic
+    localStorage.setItem(key, next ? "1" : "0");
+
+    try {
+      const res = await fetch(`/api/companies/${company.id}/follow`, {
+        method: next ? "POST" : "DELETE",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (res.status === 401) {
+        // not authenticated -> rollback and redirect to login
+        setFollowed(!next);
+        localStorage.setItem(key, (!next) ? "1" : "0");
+        router.push(`/login?redirect=/companies/${company.slug ?? company.id}`);
+        return;
+      }
+
+      if (!res.ok) {
+        // rollback on other errors
+        const body = await res.json().catch(()=>({}));
+        console.warn("Follow failed", body);
+        setFollowed(!next);
+        localStorage.setItem(key, (!next) ? "1" : "0");
+      }
+    } catch (e) {
+      console.error("Network error while toggling follow:", e);
+      setFollowed(!next);
+      localStorage.setItem(key, (!next) ? "1" : "0");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const initials = company.name
+    .split(" ")
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const jobsHref = `/companies/${company.id}/jobs`;
 
   return (
-    <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
-      {/* Cover : gradient ou image */}
-      <div className="relative">
-          {/* Si tu as une image de cover tu peux la mettre en background via inline style */}
+    <div className="relative rounded-2xl overflow-hidden shadow-lg">
+      {/* cover + overlay (dark) */}
+      <div className="relative h-44 md:h-56">
+        {company.coverUrl ? (
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${company.coverUrl})` }}
+            aria-hidden
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-700 via-sky-600 to-emerald-500" aria-hidden />
+        )}
 
+        {/* dark overlay to improve contrast */}
+        <div className="absolute inset-0 bg-black/55 mix-blend-normal" aria-hidden />
 
-        <div
-        className="h-36 w-full flex items-center justify-center"
-        style={{
-          backgroundImage: "url('/placeholders/office-1.png')",
-          backgroundSize: "cover",
-          backgroundPosition: "center"
-        }}
-        aria-hidden
-      >
-        <div className="text-center">
-          <p className="text-sm text-sky-700/80">Entreprise</p>
-          <p className="text-xs text-sky-600/60">Profil d&apos;entreprise — MVP</p>
-        </div>
+        {/* subtle vignette to push focus center */}
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.35) 100%)" }} />
       </div>
 
-
-        {/* Avatar/logo qui dépasse */}
-        <div className="absolute left-6 -bottom-8">
-          {company.logoUrl ? (
-            <img
-              src={company.logoUrl}
-              alt={`${company.name} logo`}
-              className="h-20 w-20 rounded-full object-cover border-2 border-white shadow-sm"
-            />
-          ) : (
-            <div className="h-20 w-20 rounded-full bg-sky-200 flex items-center justify-center text-sky-800 font-semibold border-2 border-white shadow-sm">
-              {company.name?.split(" ").map(w => w[0]).slice(0,2).join("")}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Contenu principal */}
-      <div className="pt-10 px-6 pb-6">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-          {/* Left: nom, region, description, tags */}
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold leading-tight">
-              {company.name}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">{company.region ?? "Région non précisée"}</p>
-
-            {company.description && (
-              <p className="text-gray-700 mt-3 text-sm line-clamp-3">
-                {company.description}
-              </p>
+      {/* main content placed above cover */}
+      <div className="relative z-20 px-5 md:px-8 pb-6 -mt-14">
+        <div className="flex items-start gap-5">
+          {/* logo */}
+          <div className="flex-shrink-0">
+            {company.logoUrl ? (
+              <img
+                src={company.logoUrl}
+                alt={`${company.name} logo`}
+                className="h-28 w-28 rounded-2xl object-cover border-4 border-white shadow-md"
+              />
+            ) : (
+              <div className="h-28 w-28 rounded-2xl bg-white flex items-center justify-center text-2xl font-bold border-4 border-white shadow-md text-slate-700">
+                {initials}
+              </div>
             )}
+          </div>
 
-            {/* Tags / skills (factice) */}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(company.tags ?? ["Tech", "Fintech", "Remote"]).slice(0,5).map((t) => (
-                <span key={t} className="text-xs bg-sky-50 text-sky-700 px-2 py-1 rounded-full border border-sky-100">
-                  {t}
+          {/* title/meta/description */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">{company.name}</h1>
+              {!company.verified && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-green-50 text-green-700 border border-green-100">
+                  ✓ Vérifié
                 </span>
-              ))}
+              )}
+            </div>
+
+            <div className="text-sm text-gray-500 mt-2">
+              {company.region ?? "Région non précisée"}{company.city ? ` • ${company.city}` : ""}
+            </div>
+
+            <div className="mt-3 text-sm text-gray-700 line-clamp-3">{company.description ?? ""}</div>
+
+            <div className="mt-4 flex flex-wrap gap-2 items-center">
+              <div className="text-xs bg-gray-50 px-3 py-1 rounded-full border">{company.jobsCount ?? 0} offres</div>
+              <div className="text-xs bg-gray-50 px-3 py-1 rounded-full border">{company.recruitersCount ?? 0} recruteurs</div>
+              <div className="text-xs bg-gray-50 px-3 py-1 rounded-full border">{company.followersCount ?? 0} abonnés</div>
+              {company.size && <div className="text-xs bg-gray-50 px-3 py-1 rounded-full border">{company.size}</div>}
             </div>
           </div>
 
-          {/* Right: stats + actions */}
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex sm:gap-4 sm:items-center">
-              <div className="text-center">
-                <div className="text-sm font-semibold">{company.jobsCount ?? 8}</div>
-                <div className="text-xs text-gray-500">Offres</div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm font-semibold">{company.employeesCount ?? 24}</div>
-                <div className="text-xs text-gray-500">Employés</div>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
+          {/* actions (ensure visible) */}
+          <div className="flex flex-col items-end gap-3">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Link
-                href={`/companies/${company.id}`}
-                className="inline-flex items-center px-3 py-1.5 border rounded text-sm text-sky-700 border-sky-200 hover:bg-sky-50"
+                href={jobsHref}
+                className="inline-flex items-center px-4 py-2 rounded-md bg-sky-600 text-white text-sm font-medium shadow-sm hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-sky-300"
+                aria-label="Voir offres"
               >
-                Voir plus
+                Voir offres
               </Link>
 
-              <button
-                onClick={() => setFollowed(!followed)}
-                className={`inline-flex items-center px-3 py-1.5 rounded text-sm ${followed ? "bg-gray-100 border border-gray-200 text-gray-700" : "bg-sky-600 text-white"}`}
-                aria-pressed={followed}
-              >
-                {followed ? "Suivi" : "Suivre"}
-              </button>
+              {company.website && (
+                <a
+                  href={company.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center px-3 py-2 rounded-md border text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                >
+                  Site
+                </a>
+              )}
             </div>
+
+            <button
+              onClick={toggleFollow}
+              aria-pressed={followed}
+              disabled={loading}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition ${followed ? "bg-white text-sky-700 border border-sky-200" : "bg-sky-600 text-white"}`}
+            >
+              {followed ? "Suivi" : "Suivre"}
+            </button>
           </div>
-        </div>
-
-        {/* Petite galerie factice (pour futur contenu média) */}
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {placeholders.map((src, i) => (
-            <div key={i} className="h-16 bg-gray-100 rounded overflow-hidden flex items-center justify-center text-xs text-gray-400 border border-gray-50">
-              <img src={src} alt={`Media ${i+1}`} className="h-full w-full object-cover" onError={(e)=>{ (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-              {/* Affiche un badge si l'image n'est pas disponible */}
-              <span className="sr-only">Placeholder</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Liens sociaux / site (factice) */}
-        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          <a className="text-sky-600 hover:underline" href={company.website ?? "#"}>{company.website ? "Site web" : "Site (à ajouter)"}</a>
-          <span className="text-gray-400">•</span>
-          <a className="text-gray-600">Twitter (factice)</a>
-          <span className="text-gray-400">•</span>
-          <a className="text-gray-600">LinkedIn (factice)</a>
         </div>
       </div>
     </div>

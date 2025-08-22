@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authConfig } from "@/auth.config";
+import { faker } from "@faker-js/faker";
 
 export async function GET(req: Request) {
   try {
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
 
     const recruiter = await prisma.recruiter.findUnique({
       where: { userId: session.user.id },
-      select: { companyId: true },
+      select: { companyId: true, id:true },
     });
     if (!recruiter?.companyId)
       return NextResponse.json({ error: "Aucune entreprise associée" }, { status: 400 });
@@ -80,9 +81,11 @@ export async function POST(req: Request) {
       data: {
         title,
         description,
+        slug:`${slugify(title)}-${faker.string.alphanumeric(4)}`,
         companyId: recruiter.companyId,
         region: region || null, // OK si Job.region est String?
         type: type || null,     // OK si Job.type est String?
+        postedById: recruiter.id
       },
       include: { Company: true },
     });
