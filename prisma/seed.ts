@@ -1,5 +1,5 @@
 // prisma/seed.ts
-import { PrismaClient, Role, JobType, ApplicationStatus, RemoteType, JobStatus, Currency } from "@prisma/client";
+import { PrismaClient,Prisma, Role, JobType, ApplicationStatus, RemoteType, JobStatus, Currency, CompanyRole } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { faker } from "@faker-js/faker";
 
@@ -48,15 +48,19 @@ async function main() {
   await prisma.company.deleteMany();
   await prisma.user.deleteMany();
 
-  // 1) Companies
-  console.log(`🏢 Creating ${NUM_COMPANIES} companies…`);
-  const companies = [];
+  // 1) Companies + owner recruiter (COMPANY_MANAGER)
+  console.log(`🏢 Creating ${NUM_COMPANIES} companies (with owner recruiters)…`);
+  const companies: { id: string; name: string }[] = [];
+  const companyToRecruiters: Record<string, { userId: string; recruiterId: string }[]> = {};
+
   for (let i = 0; i < NUM_COMPANIES; i++) {
-    const name = faker.company.name() + (i % 3 === 0 ? " SARL" : "");
-    const c = await prisma.company.create({
+    const name = faker.company.name() + (i % 4 === 0 ? " SARL" : "");
+    const slug = `${slugify(name)}-${faker.string.alphanumeric(4)}`;
+
+    const company = await prisma.company.create({
       data: {
         name,
-        slug: `${slugify(name)}-${faker.string.alphanumeric(4)}`,
+        slug,
         description: faker.company.catchPhrase(),
         region: faker.helpers.arrayElement(REGIONS),
         city: faker.location.city(),
@@ -66,12 +70,31 @@ async function main() {
         verified: faker.datatype.boolean(),
       },
     });
-    companies.push(c);
+
+    // create an owner user + recruiter (COMPANY_MANAGER)
+    const owner = await prisma.user.create({
+      data: {
+        email: `owner+${slug}@example.com`,
+        password: passwordHash,
+        name: `${faker.person.firstName()} ${faker.person.lastName()}`,
+        role: Role.RECRUITER,
+        recruiter: {
+          create: {
+            companyId: company.id,
+            title: "Owner",
+            roleInCompany: CompanyRole.COMPANY_MANAGER,
+          },
+        },
+      },
+      include: { recruiter: true },
+    });
+
+    companies.push({ id: company.id, name: company.name });
+    companyToRecruiters[company.id] = [{ userId: owner.id, recruiterId: owner.recruiter!.id }];
   }
 
-  // 2) Recruiters (create user + recruiter) and map company -> recruiters
-  console.log(`🧑‍💼 Creating ${NUM_RECRUITERS} recruiters and users…`);
-  const companyToRecruiters: Record<string, { userId: string; recruiterId: string }[]> = {};
+  // 2) Additional recruiters (randomly assign to companies)
+  console.log(`🧑‍💼 Creating ${NUM_RECRUITERS} additional recruiters and users…`);
   for (let i = 0; i < NUM_RECRUITERS; i++) {
     const company = faker.helpers.arrayElement(companies);
     const user = await prisma.user.create({
@@ -84,25 +107,24 @@ async function main() {
           create: {
             companyId: company.id,
             title: faker.person.jobTitle(),
+            roleInCompany: CompanyRole.MEMBER,
           },
         },
       },
       include: { recruiter: true },
     });
 
-    const recInfo = { userId: user.id, recruiterId: user.recruiter!.id };
-    if (!companyToRecruiters[company.id]) companyToRecruiters[company.id] = [];
-    companyToRecruiters[company.id].push(recInfo);
+    companyToRecruiters[company.id].push({ userId: user.id, recruiterId: user.recruiter!.id });
   }
 
-  // 2bis) add a few fixed recruiters (dev login)
+  // 2bis) add a couple of fixed recruiters for quick login/testing
   const fixed1 = await prisma.user.create({
     data: {
       email: "hr@kiroo.cm",
       password: passwordHash,
       name: "Emmanuel Mba",
       role: Role.RECRUITER,
-      recruiter: { create: { companyId: companies[0].id, title: "HR Manager" } },
+      recruiter: { create: { companyId: companies[0].id, title: "HR Manager", roleInCompany: CompanyRole.MEMBER } },
     },
     include: { recruiter: true },
   });
@@ -114,15 +136,16 @@ async function main() {
       password: passwordHash,
       name: "Aïcha Diallo",
       role: Role.RECRUITER,
-      recruiter: { create: { companyId: companies[1].id, title: "Talent Lead" } },
+      recruiter: { create: { companyId: companies[1].id, title: "Talent Lead", roleInCompany: CompanyRole.MEMBER } },
     },
     include: { recruiter: true },
   });
   companyToRecruiters[companies[1].id].push({ userId: fixed2.id, recruiterId: fixed2.recruiter!.id });
 
   // 3) Candidates (users + candidate) + experiences & educations
-  console.log(`🧑‍🎓 Creating ${NUM_CANDIDATES} candidates…`);
+  console.log(`🧑‍🎓 Creating ${NUM_CANDIDATES} candidates (with experiences & educations)…`);
   const candidates: { id: string; resumeUrl?: string | null }[] = [];
+
   for (let i = 0; i < NUM_CANDIDATES; i++) {
     const email = faker.internet.email().toLowerCase();
     const user = await prisma.user.create({
@@ -138,7 +161,10 @@ async function main() {
             locationCity: faker.location.city(),
             locationCountry: "Cameroun",
             resumeUrl: faker.internet.url(),
-            skills: faker.helpers.arrayElements(["JavaScript", "Python", "React", "Node.js", "SQL", "Design", "DevOps", "UI/UX"], { min: 2, max: 5 }),
+            skills: faker.helpers.arrayElements(
+              ["JavaScript", "Python", "React", "Node.js", "SQL", "Design", "DevOps", "UI/UX"],
+              { min: 2, max: 5 }
+            ),
             links: { linkedin: faker.internet.url(), website: faker.internet.url() },
           },
         },
@@ -146,7 +172,7 @@ async function main() {
       include: { candidate: true },
     });
 
-    // experiences
+    // experiences (0..3)
     const expCount = faker.number.int({ min: 0, max: 3 });
     for (let e = 0; e < expCount; e++) {
       await prisma.experience.create({
@@ -161,7 +187,7 @@ async function main() {
       });
     }
 
-    // educations
+    // educations (0..2)
     const eduCount = faker.number.int({ min: 0, max: 2 });
     for (let ed = 0; ed < eduCount; ed++) {
       await prisma.education.create({
@@ -179,13 +205,15 @@ async function main() {
     candidates.push({ id: user.candidate!.id, resumeUrl: user.candidate!.resumeUrl ?? null });
   }
 
-  // 4) Jobs (création + assign postedById si recruteur dispo pour cette company)
+  // 4) Jobs (création + assign postedById from a recruiter of that company)
   console.log(`📄 Creating ${NUM_JOBS} jobs…`);
   const jobs = [];
+
   for (let i = 0; i < NUM_JOBS; i++) {
     const company = faker.helpers.arrayElement(companies);
     const title = faker.person.jobTitle();
-    // choose a recruiter for this company if any
+
+    // pick a recruiter for this company (there is always at least the owner)
     const recs = companyToRecruiters[company.id] ?? [];
     const pickedRec = recs.length > 0 ? faker.helpers.arrayElement(recs) : null;
 
@@ -194,7 +222,7 @@ async function main() {
         title,
         slug: `${slugify(title)}-${faker.string.alphanumeric(4)}`,
         companyId: company.id,
-        postedById: pickedRec!.recruiterId,
+        postedById: pickedRec ? pickedRec.recruiterId : companyToRecruiters[companies[0].id][0].recruiterId, // fallback
         region: faker.helpers.arrayElement(REGIONS),
         city: faker.location.city(),
         type: faker.helpers.arrayElement(Object.values(JobType)),
@@ -210,14 +238,15 @@ async function main() {
         tags: faker.helpers.arrayElements(["Remote", "Agile", "FinTech", "AI", "Cloud", "HealthTech"], { min: 1, max: 3 }),
       },
     });
+
     jobs.push(j);
   }
 
-  // 5) CompanyFollow (quelques follows aléatoires pour tester)
+  // 5) CompanyFollow (quelques follows aléatoires)
   console.log("⭐ Creating random company follows...");
-  const followOps = [];
+  const followOps: Prisma.PrismaPromise<any>[] = [];
+  
   for (const comp of companies) {
-    // pick few candidates to follow this company
     const toFollow = faker.helpers.arrayElements(candidates, faker.number.int({ min: 0, max: 6 }));
     for (const f of toFollow) {
       followOps.push(
@@ -227,7 +256,7 @@ async function main() {
       );
     }
   }
-  // execute in smaller batches
+  // execute in batches
   for (let i = 0; i < followOps.length; i += 50) {
     await prisma.$transaction(followOps.slice(i, i + 50));
   }

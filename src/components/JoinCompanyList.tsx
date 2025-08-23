@@ -15,7 +15,7 @@ export default function JoinCompanyList({ recruiterId }: { recruiterId?: string 
   const [q, setQ] = useState("");
   const [region, setRegion] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(12);
+  const [pageSize] = useState(6);
 
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);

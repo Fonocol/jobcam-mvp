@@ -18,7 +18,7 @@ export default function ApplyPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jobId: params.id,
-        candidateId: session?.user.candidateId, // TODO: remplacer par ID connecté
+        candidateId: session?.user.candidateId, 
         message,
         cvUrl
       }),

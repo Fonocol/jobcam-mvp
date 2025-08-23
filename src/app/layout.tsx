@@ -42,8 +42,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </div>
             </div>
           </header>
+                <main className="flex-grow p-4">{children}</main>
 
-          <main className="flex-grow max-w-5xl mx-auto p-4">{children}</main>
+          {/*<main className="flex-grow max-w-5xl mx-auto p-4">{children}</main>*/}
 
           <footer className="bg-gray-100 p-4 text-center">
             © {new Date().getFullYear()} Plateforme Emploi - MVP
