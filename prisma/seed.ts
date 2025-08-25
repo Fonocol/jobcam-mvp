@@ -1,5 +1,5 @@
 // prisma/seed.ts
-import { PrismaClient,Prisma, Role, JobType, ApplicationStatus, RemoteType, JobStatus, Currency, CompanyRole } from "@prisma/client";
+import { PrismaClient, Prisma, Role, JobType, ApplicationStatus, RemoteType, JobStatus, Currency, CompanyRole } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { faker } from "@faker-js/faker";
 
@@ -14,6 +14,7 @@ const NUM_CANDIDATES = 200;
 const NUM_JOBS = 300;
 const MIN_APPS_PER_CANDIDATE = 1;
 const MAX_APPS_PER_CANDIDATE = 4;
+const NUM_RESUME_TEMPLATES = 5;
 const REGIONS = [
   "Centre",
   "Littoral",
@@ -31,6 +32,197 @@ function slugify(str: string) {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+// Types pour la structure JSON des CVs
+interface ResumeData {
+  personal: {
+    fullName: string;
+    title: string;
+    email: string;
+    phone: string;
+    location: string;
+    photo?: string;
+    summary: string;
+    links: {
+      linkedin?: string;
+      github?: string;
+      portfolio?: string;
+      twitter?: string;
+    };
+  };
+  experiences: Array<{
+    id: string;
+    company: string;
+    position: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    current: boolean;
+    description: string;
+    skills: string[];
+  }>;
+  education: Array<{
+    id: string;
+    school: string;
+    degree: string;
+    field: string;
+    startDate: string;
+    endDate: string;
+    description: string;
+  }>;
+  skills: Array<{
+    id: string;
+    name: string;
+    category: string;
+    level: number;
+  }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    description: string;
+    technologies: string[];
+    link?: string;
+  }>;
+  languages: Array<{
+    id: string;
+    name: string;
+    level: string;
+  }>;
+  certifications: Array<{
+    id: string;
+    name: string;
+    issuer: string;
+    date: string;
+    link?: string;
+  }>;
+}
+
+interface ResumeStyle {
+  colors: {
+    primary: string;
+    secondary: string;
+    background: string;
+    text: string;
+    accent?: string;
+  };
+  fonts: {
+    headings: string;
+    body: string;
+  };
+  spacing: {
+    section: number;
+    item: number;
+  };
+}
+
+// Templates de CV avec structure JSON
+const resumeTemplates = [
+  {
+    name: "Moderne",
+    category: "Moderne",
+    structure: {
+      sections: ["personal", "experience", "education", "skills", "projects"],
+      layout: "modern" as const,
+    },
+    style: {
+      colors: {
+        primary: "#2563eb",
+        secondary: "#64748b",
+        background: "#ffffff",
+        text: "#1f2937",
+        accent: "#f59e0b"
+      },
+      fonts: {
+        headings: "Inter",
+        body: "Inter"
+      },
+      spacing: {
+        section: 6,
+        item: 4
+      }
+    },
+    isPublic: true,
+    isPremium: false
+  },
+  {
+    name: "Classique",
+    category: "Classique",
+    structure: {
+      sections: ["personal", "experience", "education", "skills", "languages"],
+      layout: "classic" as const,
+    },
+    style: {
+      colors: {
+        primary: "#374151",
+        secondary: "#6b7280",
+        background: "#ffffff",
+        text: "#111827"
+      },
+      fonts: {
+        headings: "Georgia",
+        body: "Helvetica"
+      },
+      spacing: {
+        section: 8,
+        item: 6
+      }
+    },
+    isPublic: true,
+    isPremium: false
+  },
+  {
+    name: "Créatif",
+    category: "Créatif",
+    structure: {
+      sections: ["personal", "skills", "projects", "experience", "education"],
+      layout: "creative" as const,
+    },
+    style: {
+      colors: {
+        primary: "#7c3aed",
+        secondary: "#a78bfa",
+        background: "#faf5ff",
+        text: "#1f2937"
+      },
+      fonts: {
+        headings: "Poppins",
+        body: "Open Sans"
+      },
+      spacing: {
+        section: 4,
+        item: 3
+      }
+    },
+    isPublic: true,
+    isPremium: true
+  },
+  {
+    name: "Minimaliste",
+    category: "Minimaliste",
+    structure: {
+      sections: ["personal", "experience", "education", "skills"],
+      layout: "minimalist" as const,
+    },
+    style: {
+      colors: {
+        primary: "#000000",
+        secondary: "#666666",
+        background: "#ffffff",
+        text: "#333333"
+      },
+      fonts: {
+        headings: "Helvetica",
+        body: "Helvetica"
+      },
+      spacing: {
+        section: 10,
+        item: 8
+      }
+    },
+    isPublic: true,
+    isPremium: false
+  }
+];
+
 async function main() {
   console.time("seed_total");
   faker.seed(42);
@@ -38,6 +230,8 @@ async function main() {
 
   // Cleanup (ordre FK)
   console.log("🧹 Cleaning DB…");
+  await prisma.resume.deleteMany();
+  await prisma.resumeTemplate.deleteMany();
   await prisma.application.deleteMany();
   await prisma.job.deleteMany();
   await prisma.companyFollow.deleteMany();
@@ -48,7 +242,32 @@ async function main() {
   await prisma.company.deleteMany();
   await prisma.user.deleteMany();
 
-  // 1) Companies + owner recruiter (COMPANY_MANAGER)
+  // 1) Création des templates de CV
+  console.log("📝 Creating resume templates...");
+  const adminUser = await prisma.user.create({
+    data: {
+      email: "admin@example.com",
+      password: passwordHash,
+      name: "Admin User",
+      role: Role.ADMIN,
+    },
+  });
+
+  for (const template of resumeTemplates) {
+    await prisma.resumeTemplate.create({
+      data: {
+        name: template.name,
+        category: template.category,
+        structure: template.structure,
+        style: template.style,
+        isPublic: template.isPublic,
+        isPremium: template.isPremium,
+        createdById: adminUser.id,
+      },
+    });
+  }
+
+  // 2) Companies + owner recruiter (COMPANY_MANAGER)
   console.log(`🏢 Creating ${NUM_COMPANIES} companies (with owner recruiters)…`);
   const companies: { id: string; name: string }[] = [];
   const companyToRecruiters: Record<string, { userId: string; recruiterId: string }[]> = {};
@@ -93,7 +312,7 @@ async function main() {
     companyToRecruiters[company.id] = [{ userId: owner.id, recruiterId: owner.recruiter!.id }];
   }
 
-  // 2) Additional recruiters (randomly assign to companies)
+  // 3) Additional recruiters (randomly assign to companies)
   console.log(`🧑‍💼 Creating ${NUM_RECRUITERS} additional recruiters and users…`);
   for (let i = 0; i < NUM_RECRUITERS; i++) {
     const company = faker.helpers.arrayElement(companies);
@@ -117,7 +336,7 @@ async function main() {
     companyToRecruiters[company.id].push({ userId: user.id, recruiterId: user.recruiter!.id });
   }
 
-  // 2bis) add a couple of fixed recruiters for quick login/testing
+  // 4) add a couple of fixed recruiters for quick login/testing
   const fixed1 = await prisma.user.create({
     data: {
       email: "hr@kiroo.cm",
@@ -142,25 +361,31 @@ async function main() {
   });
   companyToRecruiters[companies[1].id].push({ userId: fixed2.id, recruiterId: fixed2.recruiter!.id });
 
-  // 3) Candidates (users + candidate) + experiences & educations
-  console.log(`🧑‍🎓 Creating ${NUM_CANDIDATES} candidates (with experiences & educations)…`);
-  const candidates: { id: string; resumeUrl?: string | null }[] = [];
+  // 5) Candidates (users + candidate) + experiences & educations + CV
+  console.log(`🧑‍🎓 Creating ${NUM_CANDIDATES} candidates (with experiences, educations & resumes)…`);
+  const candidates: { id: string; userId: string }[] = [];
+  const publicTemplates = await prisma.resumeTemplate.findMany({ where: { isPublic: true } });
 
   for (let i = 0; i < NUM_CANDIDATES; i++) {
     const email = faker.internet.email().toLowerCase();
+    const name = faker.person.fullName();
+    const city = faker.location.city();
+    const country = "Cameroun";
+    
     const user = await prisma.user.create({
       data: {
         email,
         password: passwordHash,
-        name: faker.person.fullName(),
+        name,
         role: Role.CANDIDATE,
         candidate: {
           create: {
             headline: faker.person.jobTitle(),
             bio: faker.lorem.paragraph(),
-            locationCity: faker.location.city(),
-            locationCountry: "Cameroun",
+            locationCity: city,
+            locationCountry: country,
             resumeUrl: faker.internet.url(),
+            phone: faker.phone.number(),
             skills: faker.helpers.arrayElements(
               ["JavaScript", "Python", "React", "Node.js", "SQL", "Design", "DevOps", "UI/UX"],
               { min: 2, max: 5 }
@@ -173,9 +398,10 @@ async function main() {
     });
 
     // experiences (0..3)
+    const experiences = [];
     const expCount = faker.number.int({ min: 0, max: 3 });
     for (let e = 0; e < expCount; e++) {
-      await prisma.experience.create({
+      const experience = await prisma.experience.create({
         data: {
           candidateId: user.candidate!.id,
           title: faker.person.jobTitle(),
@@ -185,12 +411,14 @@ async function main() {
           description: faker.lorem.sentences(2),
         },
       });
+      experiences.push(experience);
     }
 
     // educations (0..2)
+    const educations = [];
     const eduCount = faker.number.int({ min: 0, max: 2 });
     for (let ed = 0; ed < eduCount; ed++) {
-      await prisma.education.create({
+      const education = await prisma.education.create({
         data: {
           candidateId: user.candidate!.id,
           school: faker.company.name() + " University",
@@ -200,12 +428,99 @@ async function main() {
           endDate: faker.datatype.boolean() ? faker.date.past({ years: 1 }) : null,
         },
       });
+      educations.push(education);
     }
 
-    candidates.push({ id: user.candidate!.id, resumeUrl: user.candidate!.resumeUrl ?? null });
+    // Create resume with JSON structure
+    const template = faker.helpers.arrayElement(publicTemplates);
+    
+    const resumeData: ResumeData = {
+      personal: {
+        fullName: name,
+        title: user.candidate!.headline || faker.person.jobTitle(),
+        email: email,
+        phone: user.candidate!.phone || faker.phone.number(),
+        location: `${city}, ${country}`,
+        summary: user.candidate!.bio || faker.lorem.paragraph(),
+        links: user.candidate!.links as any || {
+          linkedin: faker.internet.url(),
+          github: faker.internet.url()
+        }
+      },
+      experiences: experiences.map(exp => ({
+        id: exp.id,
+        company: exp.company || faker.company.name(),
+        position: exp.title,
+        location: faker.location.city(),
+        startDate: exp.startDate.toISOString().split('T')[0],
+        endDate: exp.endDate ? exp.endDate.toISOString().split('T')[0] : '',
+        current: !exp.endDate,
+        description: exp.description || '',
+        skills: faker.helpers.arrayElements(
+          ["React", "Node.js", "Python", "SQL", "AWS", "Docker"],
+          { min: 1, max: 3 }
+        )
+      })),
+      education: educations.map(edu => ({
+        id: edu.id,
+        school: edu.school,
+        degree: edu.degree || "Licence",
+        field: edu.field || "Informatique",
+        startDate: edu.startDate ? edu.startDate.toISOString().split('T')[0] : '',
+        endDate: edu.endDate ? edu.endDate.toISOString().split('T')[0] : '',
+        description: faker.lorem.sentence()
+      })),
+      skills: user.candidate!.skills.map(skill => ({
+        id: faker.string.uuid(),
+        name: skill,
+        category: faker.helpers.arrayElement(["Technique", "Langages", "Frameworks", "Outils"]),
+        level: faker.number.int({ min: 3, max: 5 })
+      })),
+      projects: Array.from({ length: faker.number.int({ min: 0, max: 2 }) }, () => ({
+        id: faker.string.uuid(),
+        name: faker.commerce.productName() + " Project",
+        description: faker.lorem.paragraph(),
+        technologies: faker.helpers.arrayElements(
+          ["React", "Node.js", "MongoDB", "Express", "TypeScript"],
+          { min: 2, max: 4 }
+        ),
+        link: faker.internet.url()
+      })),
+      languages: Array.from({ length: faker.number.int({ min: 1, max: 3 }) }, () => ({
+        id: faker.string.uuid(),
+        name: faker.helpers.arrayElement(["Français", "Anglais", "Espagnol", "Allemand"]),
+        level: faker.helpers.arrayElement(["Débutant", "Intermédiaire", "Avancé", "Natif"])
+      })),
+      certifications: Array.from({ length: faker.number.int({ min: 0, max: 2 }) }, () => ({
+        id: faker.string.uuid(),
+        name: faker.helpers.arrayElement(["AWS Certified", "Google Cloud", "Microsoft Azure", "Scrum Master"]),
+        issuer: faker.company.name(),
+        date: faker.date.past({ years: 2 }).toISOString().split('T')[0],
+        link: faker.internet.url()
+      }))
+    };
+
+    // Create resume with JSON content
+    const resume = await prisma.resume.create({
+      data: {
+        candidateId: user.candidate!.id,
+        title: `CV - ${user.candidate!.headline}`,
+        layout: template.structure.layout || "modern",
+        content: resumeData,
+        style: template.style,
+        isPublic: faker.datatype.boolean(),
+        isPrimary: true,
+        pdfUrl: user.candidate!.resumeUrl,
+      }
+    });
+
+    candidates.push({ 
+      id: user.candidate!.id, 
+      userId: user.id
+    });
   }
 
-  // 4) Jobs (création + assign postedById from a recruiter of that company)
+  // 6) Jobs (création + assign postedById from a recruiter of that company)
   console.log(`📄 Creating ${NUM_JOBS} jobs…`);
   const jobs = [];
 
@@ -242,7 +557,7 @@ async function main() {
     jobs.push(j);
   }
 
-  // 5) CompanyFollow (quelques follows aléatoires)
+  // 7) CompanyFollow (quelques follows aléatoires)
   console.log("⭐ Creating random company follows...");
   const followOps: Prisma.PrismaPromise<any>[] = [];
   
@@ -261,7 +576,7 @@ async function main() {
     await prisma.$transaction(followOps.slice(i, i + 50));
   }
 
-  // 6) Applications (éviter duplications : utiliser Set)
+  // 8) Applications (éviter duplications : utiliser Set)
   console.log("📨 Creating applications...");
   const appRows: { jobId: string; candidateId: string; message: string; cvUrl?: string; status: ApplicationStatus }[] = [];
   const jobIds = jobs.map(j => j.id);
@@ -274,11 +589,17 @@ async function main() {
     for (const jobId of picked) {
       if (seen.has(`${cand.id}:${jobId}`)) continue;
       seen.add(`${cand.id}:${jobId}`);
+      
+      // Get candidate's primary resume for CV URL
+      const candidateResume = await prisma.resume.findFirst({
+        where: { candidateId: cand.id, isPrimary: true }
+      });
+      
       appRows.push({
         jobId,
         candidateId: cand.id,
         message: faker.lorem.sentences({ min: 1, max: 2 }),
-        cvUrl: cand.resumeUrl ?? faker.internet.url(),
+        cvUrl: candidateResume?.pdfUrl || faker.internet.url(),
         status: faker.helpers.arrayElement(Object.values(ApplicationStatus)),
       });
     }
@@ -298,6 +619,7 @@ async function main() {
     Candidates: candidates.length,
     Jobs: jobs.length,
     Applications: appRows.length,
+    ResumeTemplates: resumeTemplates.length,
   });
 
   console.timeEnd("seed_total");

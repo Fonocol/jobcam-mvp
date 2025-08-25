@@ -20,6 +20,7 @@ model User {
   sessions  Session[]
 
   @@index([email])
+
 }
 
 model Candidate {
@@ -47,6 +48,7 @@ model Candidate {
   experiences     Experience[]
 
   @@index([locationCountry, locationCity])
+  Resume Resume[]
 }
 
 model Experience {
@@ -184,6 +186,40 @@ model Application {
   @@index([createdAt])
 }
 
+model Resume {
+  id          String   @id @default(cuid())
+  candidateId String   @unique
+  title       String
+  layout      String   @default("modern")
+  content     Json     // Les données structurées en JSON
+  style       Json?    // Configuration de style personnalisée
+  isPublic    Boolean  @default(false)
+  isPrimary   Boolean  @default(false)
+  pdfUrl      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  Candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@map("resumes")
+}
+
+model ResumeTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  category    String
+  thumbnail   String?
+  structure   Json     // Structure du template avec sections
+  style       Json     // Configuration CSS par défaut
+  isPublic    Boolean  @default(true)
+  isPremium   Boolean  @default(false)
+  price       Float?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("resume_templates")
+}
+
 /// Optionnel: next-auth session storage (si tu veux persister sessions)
 model Session {
   id           String   @id @default(cuid())
@@ -194,6 +230,70 @@ model Session {
   createdAt    DateTime @default(now())
   User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+
+// model Resume {
+//   id          String           @id @default(cuid())
+//   candidateId String           @unique
+//   title       String?          // ex: "CV - Développeur Fullstack"
+//   visibility  Boolean          @default(false) // public ? true : private
+//   isPrimary   Boolean          @default(false) // utilisé par défaut lors d'une candidature
+//   currentVersionId String?     // FK vers ResumeVersion
+//   createdAt   DateTime         @default(now())
+//   updatedAt   DateTime         @updatedAt
+//   Candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+//   versions    ResumeVersion[]
+//   ResumeVersion ResumeVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+// }
+
+// model ResumeTemplate {
+//   id          String   @id @default(cuid())
+//   name        String
+//   description String?
+//   content     String   // Template en markdown avec variables {{nom}}, {{experience}}, etc.
+//   isPublic    Boolean  @default(false)
+//   createdById String
+//   createdAt   DateTime @default(now())
+//   updatedAt   DateTime @updatedAt
+//   User        User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  
+//   @@index([isPublic])
+//   ResumeVersion ResumeVersion[]
+// }
+
+// // Modifiez ResumeVersion pour stocker le markdown
+// model ResumeVersion {
+//   id          String   @id @default(cuid())
+//   resumeId    String
+//   markdown    String?   // Contenu en markdown
+//   html        String?   // HTML généré
+//   fileUrl     String?
+//   extracted   Json?
+//   templateId  String?   // Référence au template utilisé
+//   createdAt   DateTime  @default(now())
+//   createdById String?
+//   Resume      Resume    @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+//   Template    ResumeTemplate? @relation(fields: [templateId], references: [id])
+
+//   @@index([createdAt])
+//   ResumeCurrentVersion Resume[] @relation("CurrentVersion")
+// }
+
+// model ResumeVersion {
+//   id          String   @id @default(cuid())
+//   resumeId    String
+//   content     String?   // HTML ou Markdown du CV pour l'éditeur
+//   fileUrl     String?   // URL S3 du PDF/DOCX uploadé (optionnel)
+//   extracted   Json?     // {skills:[], emails:[], phones:[], experiences: [...]}
+//   createdAt   DateTime  @default(now())
+//   createdById String?   // user id who made it
+//   Resume      Resume    @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+//   @@index([createdAt])
+//   ResumeCurrentVersion Resume[] @relation("CurrentVersion")
+
+// }
+
 
 /// Enums
 enum Role {
