@@ -4,13 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authConfig } from "@/auth.config";
 import { CompanyRole } from "@prisma/client";
+//{ params }: { params: Record<string, string | undefined> 
 
 export async function POST(
   _req: Request,
-  { params }: { params: Record<string, string | undefined> }
+  context: { params: Promise<{ id: string }> ,
+  }
 ) {
   try {
-    
+    const params = await context.params;
     const companyId =  params.id;
     if (!companyId) {
       return NextResponse.json({ ok: false, error: "Missing company id in route" }, { status: 400 });
