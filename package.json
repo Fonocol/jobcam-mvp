@@ -6,14 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "lint": "next lint"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
+
   "dependencies": {
     "@faker-js/faker": "^9.9.0",
     "@hookform/resolvers": "^3.9.0",
@@ -52,3 +47,6 @@
     "typescript": "^5"
   }
 }
+
+
+
