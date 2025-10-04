@@ -24,7 +24,7 @@ export default function UserMenu({ name, role }: { name?: string; role?: string 
         <Link href="/candidate-dashboard" className="underline hover:text-blue-600">
           Mes Candidatures
         </Link>
-        <Link href="profile/resumes" className="underline hover:text-blue-600">
+        <Link href="/profile/resumes" className="underline hover:text-blue-600">
           Resume
         </Link>
         </>        
