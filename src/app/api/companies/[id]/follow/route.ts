@@ -4,7 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authConfig } from "@/auth.config";
 
-export async function POST(req: Request, context: { params: { id: string } }) {
+//{ params }: { params: Record<string, string | undefined>
+
+export async function POST(
+  req: Request,
+  context: { params: Record<string, string> }
+) {
   const { params } = context;
   try {
     const session = await getServerSession(authConfig);
@@ -38,7 +43,10 @@ export async function POST(req: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function DELETE(req: Request, context: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  context: { params: Record<string, string> }
+) {
   const { params } = context;
   try {
     const session = await getServerSession(authConfig);
