@@ -1,6 +1,7 @@
 // lib/resumeUtils.ts
 import { prisma } from '@/lib/prisma';
 import { ResumeData, ResumeStyle } from '@/types/resume';
+import { Prisma } from '@prisma/client';
 
 export async function createResume(candidateId: string, data: {
   title: string;
@@ -11,29 +12,42 @@ export async function createResume(candidateId: string, data: {
   return await prisma.resume.create({
     data: {
       title: data.title,
-      content: data.content,
+      content: data.content as unknown as Prisma.InputJsonValue,
       layout: data.layout || 'modern',
-      style: data.style || null,
+      style: data.style === undefined ? undefined : (data.style as unknown as Prisma.InputJsonValue),
       candidateId: candidateId,
     },
   });
 }
 
-export async function updateResume(id: string, candidateId: string, data: {
-  title?: string;
-  content?: ResumeData;
-  layout?: string;
-  style?: ResumeStyle;
-  isPublic?: boolean;
-}) {
+
+export async function updateResume(
+  id: string,
+  candidateId: string,
+  data: {
+    title?: string;
+    content?: ResumeData;
+    layout?: string;
+    style?: ResumeStyle | null;
+    isPublic?: boolean;
+  }
+) {
   return await prisma.resume.update({
     where: { id, candidateId },
     data: {
       ...data,
+      content: data.content
+        ? (data.content as unknown as Prisma.InputJsonValue)
+        : undefined,
+      style:
+        data.style === undefined
+          ? undefined
+          : (data.style as unknown as Prisma.InputJsonValue),
       updatedAt: new Date(),
     },
   });
 }
+
 
 export async function getResumesByCandidate(candidateId: string) {
   return await prisma.resume.findMany({
