@@ -4,13 +4,21 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authConfig } from "@/auth.config";
 
-export async function POST(_req: Request, context: { params: { id: string } }) {
-  const { id: companyId } = context.params;
-
+export async function POST(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
+    const params = await context.params;
+    const companyId = params.id;
+
     const session = await getServerSession(authConfig);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!companyId) {
+      return NextResponse.json({ error: "Missing company id" }, { status: 400 });
     }
 
     const userId = session.user.id;
@@ -37,13 +45,21 @@ export async function POST(_req: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function DELETE(_req: Request, context: { params: { id: string } }) {
-  const { id: companyId } = context.params;
-
+export async function DELETE(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
+    const params = await context.params;
+    const companyId = params.id;
+
     const session = await getServerSession(authConfig);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!companyId) {
+      return NextResponse.json({ error: "Missing company id" }, { status: 400 });
     }
 
     const userId = session.user.id;
