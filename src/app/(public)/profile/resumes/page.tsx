@@ -96,17 +96,22 @@ export default function ResumesPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/resumes/list", {
-        headers: { "x-user-id": userId },
+        headers: { "x-user-id": session?.user?.candidateId || "" },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      
+      
       setResumes(data.resumes || []);
+      console.log("Résumes reçus:", data.resumes);
     } catch (e) {
       console.error(e);
       setResumes([]);
     } finally {
       setLoading(false);
     }
+
+    
   }
 
   useEffect(() => {
@@ -213,6 +218,51 @@ export default function ResumesPage() {
           </div>
 
           {/* ... le reste de l'affichage des CVs existants */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+  {resumes.length === 0 && !loading && (
+    <p>Aucun CV trouvé</p>
+  )}
+
+  {resumes.map((resume) => (
+    <ResumeCard
+      key={resume.id}
+      resume={resume}
+      onEdit={() => {
+        setEditingResume(resume);
+        setShowEditor(true);
+      }}
+      onDelete={async () => {
+        try {
+          const res = await fetch(`/api/resumes/delete`, {
+            method: "DELETE",
+            headers: { "x-user-id": session?.user?.candidateId || "", "Content-Type": "application/json" },
+            body: JSON.stringify({ id: resume.id }),
+          });
+          if (res.ok) {
+            setResumes(resumes.filter((r) => r.id !== resume.id));
+          }
+        } catch (err) {
+          console.error("Erreur suppression CV:", err);
+        }
+      }}
+      onSetPrimary={async () => {
+        try {
+          const res = await fetch(`/api/resumes/set-primary`, {
+            method: "POST",
+            headers: { "x-user-id": session?.user?.candidateId || "", "Content-Type": "application/json" },
+            body: JSON.stringify({ id: resume.id }),
+          });
+          if (res.ok) {
+            fetchResumes(); // recharge la liste après changement de CV principal
+          }
+        } catch (err) {
+          console.error("Erreur définition CV principal:", err);
+        }
+      }}
+    />
+  ))}
+</div>
+
         </>
       )}
     </div>

@@ -501,18 +501,21 @@ async function main() {
     };
 
     // Create resume with JSON content
+    const layout = (template.structure as { layout?: string }).layout ?? "modern";
+
     const resume = await prisma.resume.create({
       data: {
         candidateId: user.candidate!.id,
         title: `CV - ${user.candidate!.headline}`,
-        layout: template.structure.layout || "modern",
-        content: resumeData,
-        style: template.style,
+        layout: layout,
+        content: resumeData as unknown as Prisma.InputJsonValue,  // content JSON
+        style: template.style ?? undefined,            // style optionnel
         isPublic: faker.datatype.boolean(),
         isPrimary: true,
         pdfUrl: user.candidate!.resumeUrl,
       }
     });
+
 
     candidates.push({ 
       id: user.candidate!.id, 
