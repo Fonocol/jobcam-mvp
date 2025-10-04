@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth/next";
 import { authConfig } from "@/auth.config";
 
 export async function POST(
-  req: Request,
+  _req: Request,
   { params }: { params: { [key: string]: string | undefined } }
 ) {
   try {
@@ -44,7 +44,7 @@ export async function POST(
 }
 
 export async function DELETE(
-  req: Request,
+  _req: Request,
   { params }: { params: { [key: string]: string | undefined } }
 ) {
   try {
