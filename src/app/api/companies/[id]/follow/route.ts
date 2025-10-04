@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authConfig } from "@/auth.config";
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, context: { params: { id: string } }) {
+  const { params } = context;
   try {
     const session = await getServerSession(authConfig);
     if (!session?.user?.id) {
@@ -25,8 +26,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       });
       return NextResponse.json({ ok: true }, { status: 201 });
     } catch (e: any) {
-      // Duplicate (already following)
-      if (e?.code === "P2002") return NextResponse.json({ ok: true, note: "already_following" }, { status: 200 });
+      if (e?.code === "P2002") {
+        return NextResponse.json({ ok: true, note: "already_following" }, { status: 200 });
+      }
       console.error("Create follow error:", e);
       return NextResponse.json({ error: "failed_to_follow" }, { status: 500 });
     }
@@ -36,7 +38,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, context: { params: { id: string } }) {
+  const { params } = context;
   try {
     const session = await getServerSession(authConfig);
     if (!session?.user?.id) {

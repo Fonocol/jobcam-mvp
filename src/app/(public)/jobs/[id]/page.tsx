@@ -13,6 +13,8 @@ import { deleteJobAction } from "./actions";
 // ---------- Page ----------
 type Props = { params: Promise<{ id: string }> };
 
+
+
 export default async function JobDetailPage({ params }: Props) {
   const { id } = await params;
   const session = await getServerSession(authConfig);
