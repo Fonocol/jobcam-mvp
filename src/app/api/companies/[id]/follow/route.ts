@@ -8,9 +8,9 @@ import { authConfig } from "@/auth.config";
 
 export async function POST(
   req: Request,
-  context: { params: Record<string, string> }
+  { params }: { params: Record<string, string > }
 ) {
-  const { params } = context;
+  
   try {
     const session = await getServerSession(authConfig);
     if (!session?.user?.id) {
@@ -45,9 +45,9 @@ export async function POST(
 
 export async function DELETE(
   req: Request,
-  context: { params: Record<string, string> }
+  { params }: { params: Record<string, string > }
 ) {
-  const { params } = context;
+
   try {
     const session = await getServerSession(authConfig);
     if (!session?.user?.id) {
