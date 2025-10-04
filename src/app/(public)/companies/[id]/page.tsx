@@ -4,9 +4,24 @@ import { prisma } from "@/lib/prisma";
 import CompanyBanner from "@/components/CompanyBanner";
 import CompanyTabs from "@/components/CompanyTabs";
 
-type Props = { params: { id: string } };
+//type Props = { params: { id: string } };
 
-export default async function CompanyPage({ params }: Props) {
+// interface CompanyPageProps {
+//   params: {
+//     id: string;
+//   };
+// }
+
+type PageProps = {
+  params: {
+    id: string;
+  };
+};
+
+
+
+
+export default async function CompanyPage({ params }: PageProps) {
   const { id } = params;
 
   const company = await prisma.company.findUnique({
